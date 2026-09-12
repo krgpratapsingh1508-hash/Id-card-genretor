@@ -161,7 +161,7 @@ db_logo = get_setting('saved_logo_b64', 'None')
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (COMPLETE FIXED)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER (OPERATIONAL ERROR FIXED)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -224,7 +224,7 @@ if app_mode == "🛡️ Admin Panel":
                 if not r_app or r_app == "":
                     continue
                 
-                # Fetching parameters safely from row index keys arrays for all 25 columns
+                # FIXED: Total exactly 24 '?' placeholders mapped correctly to table schema
                 cursor.execute('''
                     INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ''', (
@@ -271,7 +271,6 @@ if app_mode == "🛡️ Admin Panel":
         
         if rows:
             import pandas as pd
-            # Structured full list formatting map layout parameters array
             columns_list = [
                 "Application Number", "Student Name", "Samagra ID", "Father Name", "Mother Name",
                 "DOB", "Gender", "Admission Year", "Trade Name", "Trade Type", "Mobile No",
@@ -280,7 +279,6 @@ if app_mode == "🛡️ Admin Panel":
             ]
             df_full = pd.DataFrame(rows, columns=columns_list)
             
-            # Displays all 25 columns including mobile number seamlessly with horizontal scroll
             st.dataframe(df_full, use_container_width=False)
             st.write(f"Total Permanent Strength: **{len(rows)}** Students found in local database.")
             
