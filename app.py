@@ -6,12 +6,11 @@ import json
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ LOCAL ADVANCED SQLITE DATABASE ENGINE
+# 🗄️ DATABASE ENGINE (FIXED FOR EXACT COLUMNS)
 # ==========================================
 def init_db():
     conn = sqlite3.connect('dynamic_students_db.db')
     cursor = conn.cursor()
-    # Dynamic fields ko handle karne ke liye hum data ko JSON string format me save karenge
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
             app_no TEXT PRIMARY KEY,
@@ -46,17 +45,16 @@ def save_setting(key, value):
 init_db()
 
 # ==========================================
-# 🎨 DYNAMIC ID CARD DESIGN SYSTEM
+# 🎨 ID CARD DESIGN GENERATOR ENGINE
 # ==========================================
 def generate_dynamic_card(name, app_no, extra_fields_dict, photo_file, bg_color, text_color, header_title):
-    # Total fields count ke hisab se height dynamic calculate karna
-    total_fields = 2 + len(extra_fields_dict) # Name + AppNo + Extra Fields
-    card_height = 420 + (total_fields * 35) # Height auto-adjust logic
+    total_fields = 2 + len(extra_fields_dict)
+    card_height = 420 + (total_fields * 35)
     
     card = Image.new("RGB", (400, card_height), "#FFFFFF")
     draw = ImageDraw.Draw(card)
     
-    # Header Background Accent
+    # Top Header Accent
     draw.rectangle([(0, 0), (400, 110)], fill=bg_color)
     
     try:
@@ -67,10 +65,9 @@ def generate_dynamic_card(name, app_no, extra_fields_dict, photo_file, bg_color,
     except IOError:
         font_header = font_name = font_text = font_label = ImageFont.load_default()
 
-    # Institute Name
     draw.text((200, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm")
     
-    # Passport Photo Frame Loader
+    # Photo Holder box logic
     if photo_file is not None:
         try:
             student_img = Image.open(photo_file)
@@ -83,30 +80,26 @@ def generate_dynamic_card(name, app_no, extra_fields_dict, photo_file, bg_color,
         draw.rectangle([(140, 140), (260, 280)], fill="#E1E4E8", outline=bg_color, width=2)
         draw.text((200, 210), "[ PHOTO ]", fill="#586069", font=font_text, anchor="mm")
     
-    # Student Full Name Text
+    # Name placement
     draw.text((200, 315), str(name).upper(), fill=text_color, font=font_name, anchor="mm")
     
-    # --- Dynamic Fields Drawing Layout Loop ---
     current_y = 360
-    
-    # Fixed Application No Field
+    # Fixed Application Number Line rendering
     draw.text((50, current_y), "Application No:", fill=bg_color, font=font_label)
     draw.text((180, current_y), f"{app_no}", fill=text_color, font=font_text)
     current_y += 35
     
-    # Extra Dynamic Admin Defined Fields Loop execution
+    # Loop over extra labels safely mapped
     for label, val in extra_fields_dict.items():
-        # Title case format spacing adjust
         display_label = label.strip().title() + ":"
         draw.text((50, current_y), display_label, fill=bg_color, font=font_label)
         draw.text((180, current_y), f"{val}", fill=text_color, font=font_text)
         current_y += 35
         
-    # Standard Validation stamp placement
     draw.text((50, current_y), "Validity:", fill=bg_color, font=font_label)
     draw.text((180, current_y), "2026 - 2027", fill=text_color, font=font_text)
     
-    # Bottom Fixed Signatory Stamp Footer
+    # Signatory Bottom footer panel
     draw.rectangle([(0, card_height - 55), (400, card_height)], fill="#222222")
     draw.text((200, card_height - 28), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
     
@@ -116,21 +109,17 @@ def generate_dynamic_card(name, app_no, extra_fields_dict, photo_file, bg_color,
 
 
 # ==========================================
-# 🌐 MAIN ROUTER LAYOUT CONTROLLER
+# 🌐 ROUTER CORE WEB UI
 # ==========================================
-st.set_page_config(page_title="Dynamic Setup ID Engine", page_icon="🪪")
-
-# Initialize global layout state variables from persistence layers
 db_title = get_setting('header_title', 'UNIVERSAL INSTITUTE')
 db_bg = get_setting('bg_color', '#0052cc')
 db_text = get_setting('text_color', '#333333')
-# Default tags placeholder strings configuration
-db_fields = get_setting('custom_fields', 'Course, Father Name, Mobile No')
+db_fields = get_setting('custom_fields', 'Father Name, Dob, Trade Name, Trainee Mobile')
 
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ SYSTEM SECTION 1: ADMIN ARCHITECT
+# 🛡️ SECTION 1: ADMIN CONTROL CENTER
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -145,11 +134,10 @@ if app_mode == "🛡️ Admin Panel":
         new_text = st.color_picker("Text Color", db_text)
         
         st.write("")
-        st.markdown("##### ⚙️ ID Card Par Kya Kya Details Aayengi?")
-        st.caption("Jo fields aapko chahiye unhe comma (,) lagakar likhein. System automatic unka layout aur database bana dega.")
+        st.markdown("##### ⚙️ ID Card Par Kya Details Aayengi?")
+        st.caption("Aapke 25 columns me se jo bhi aapko card par print karna hai unka naam comma (,) laga kar exact likhein:")
         new_fields = st.text_input("Custom Layout Fields (Comma Separated):", db_fields)
         
-        # State syncing trigger conditions checking block
         if new_title != db_title or new_bg != db_bg or new_text != db_text or new_fields != db_fields:
             save_setting('header_title', new_title)
             save_setting('bg_color', new_bg)
@@ -160,32 +148,32 @@ if app_mode == "🛡️ Admin Panel":
         st.markdown("---")
         st.subheader("📦 Bulk CSV Importer Dashboard")
         
-        # Parse fields structured breakdown lists
         active_fields = [f.strip() for f in new_fields.split(",") if f.strip()]
-        
-        st.info(f"💡 **Aapki CSV file me yeh headings hona jaroori hai:**\n`AppNo`, `Name`, {', '.join([f'`{x}`' for x in active_fields])}")
         
         uploaded_csv = st.file_uploader("Upload Student Database (CSV)", type=["csv"])
         if uploaded_csv is not None:
-            file_contents = uploaded_csv.getvalue().decode("utf-8").splitlines()
+            # Safe encoding handles standard excel configurations sheets cleanly
+            file_contents = uploaded_csv.getvalue().decode("utf-8-sig").splitlines()
             reader = csv.DictReader(file_contents)
+            
+            # Clean headers to eliminate invisible trailing spaces from text
+            reader.fieldnames = [f.strip() for f in reader.fieldnames] if reader.fieldnames else []
             
             conn = sqlite3.connect('dynamic_students_db.db')
             cursor = conn.cursor()
             
             count = 0
             for row in reader:
-                # Primary headers verification matching sequence
-                r_app = row.get('AppNo', row.get('appno', '')).strip()
-                r_name = row.get('Name', row.get('name', 'Unknown'))
+                # FIXED: Case-insensitive extraction for exact headings matching pattern
+                r_app = row.get('Application Number', row.get('ApplicationNo', row.get('app_no', ''))).strip()
+                r_name = row.get('Name', row.get('name', 'Unknown')).strip()
                 
-                if not r_app:
+                if not r_app or r_app == "":
                     continue
                     
-                # Dynamic subfields gathering from row inside json map packing
                 student_extra_map = {}
                 for field in active_fields:
-                    student_extra_map[field] = row.get(field, row.get(field.lower(), 'N/A'))
+                    student_extra_map[field] = row.get(field, 'N/A').strip()
                 
                 json_data_str = json.dumps(student_extra_map)
                 
@@ -194,7 +182,8 @@ if app_mode == "🛡️ Admin Panel":
                 
             conn.commit()
             conn.close()
-            st.success(f"✅ Data Synchronized! {count} records saved with dynamic layouts.")
+            st.success(f"✅ Data Synchronized! {count} records saved cleanly.")
+            st.rerun()
 
         st.markdown("---")
         st.subheader("📋 Live Database Viewer")
@@ -208,7 +197,7 @@ if app_mode == "🛡️ Admin Panel":
         if rows:
             table_data = []
             for r in rows:
-                row_dict = {"Application No": r[0], "Student Name": r[1]}
+                row_dict = {"Application Number": r[0], "Student Name": r[1]}
                 try:
                     extra_meta = json.loads(r[2])
                     row_dict.update(extra_meta)
@@ -225,13 +214,16 @@ if app_mode == "🛡️ Admin Panel":
                 cursor.execute('DELETE FROM students')
                 conn.commit()
                 conn.close()
-                st.warning("Database cleared!")
+                st.warning("Database cleared successfully!")
                 st.rerun()
         else:
-            st.write("📂 Database is currently empty.")
+            st.info("📂 Database is currently empty.")
+
+    elif admin_pass != "":
+        st.error("❌ Galat Password!")
 
 # ==========================================
-# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL (FIXED FOR YOUR COLUMNS)
+# 🎓 SECTION 2: STUDENT PORTAL (FIXED)
 # ==========================================
 st.header("🎓 Student Self-Service Hub")
 
@@ -257,22 +249,18 @@ else:
         conn.close()
         
         if result:
-            s_name = result[0]   # Student ka Name tuple se nikala
-            s_json = result[1]   # Extra data JSON tuple se nikala
-            
-            # Admin dwara upload kiye gaye dynamic fields ko decode karna
+            s_name = result[0]
+            s_json = result[1]
             extra_fields_loaded = json.loads(s_json)
             
             st.success(f"🎯 Record Found! Hello, {s_name}")
             
-            # Screen par details show karna
             st.write("### 📋 Aapki Verified Details:")
             for lbl, vl in extra_fields_loaded.items():
                 st.write(f"🔹 **{lbl.title()}:** {vl}")
                 
             # 4. Photo upload field
             student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
-            
             if student_photo is not None:
                 # 5. ID Card image generate karna (Admin settings ke mutabik)
                 card_bytes = generate_dynamic_card(
@@ -294,4 +282,4 @@ else:
                     mime="image/png"
                 )
         else:
-            st.error("🔍 Yeh Application Number records me nahi mila. Kripya sahi Number dalein.")
+            st.error("🔍 Yeh Application Number records me nahi mila. Kripya sahi input enter karein.")
