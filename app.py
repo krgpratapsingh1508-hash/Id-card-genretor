@@ -7,10 +7,13 @@ import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ MASTER DATABASE ENGINE
+# 🗄️ MASTER DATABASE ENGINE (CENTRALIZED)
 # ==========================================
+def get_db_connection():
+    return sqlite3.connect('students_database.db')
+
 def init_db():
-    conn = sqlite3.connect('students_database.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
@@ -50,15 +53,20 @@ def init_db():
     conn.close()
 
 def get_setting(key, default):
-    conn = sqlite3.connect('students_database.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
     row = cursor.fetchone()
     conn.close()
-    return row[0] if row else default
+    if row:
+        val = row[0]
+        if val.startswith("('") and (val.endswith("',)") or val.endswith(",)")):
+            val = val.replace("('", "").replace("',)", "").replace(",)", "").strip("'")
+        return val
+    return default
 
 def save_setting(key, value):
-    conn = sqlite3.connect('students_database.db')
+    conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
     conn.commit()
@@ -86,7 +94,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         font_header = font_sub = font_name = font_text = font_label = ImageFont.load_default()
 
     header_text_x = 210
-    if logo_base64 and logo_base64 != "None":
+    if logo_base64 and logo_base64 != "None" and logo_base64 != "":
         try:
             logo_data = base64.b64decode(logo_base64)
             logo_img = Image.open(io.BytesIO(logo_data)).convert("RGBA")
@@ -96,7 +104,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         except Exception:
             pass
 
-    draw.text((header_text_x, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm" if header_text_x==210 else "lm")
+    draw.text((header_text_x, 55), str(header_title).upper(), fill="#FFFFFF", font=font_header, anchor="mm" if header_text_x==210 else "lm")
     draw.text((header_text_x, 90), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor="mm" if header_text_x==210 else "lm")
     
     cx, cy, r = 210, 215, 65
@@ -141,9 +149,9 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     return img_byte_arr.getvalue()
 
 # ==========================================
-# 🌐 ROUTER MAIN CORE UI
+# 🌐 MAIN ROUTER LAYOUT CONTROLLER
 # ==========================================
-db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
+db_title = get_setting('header_title', 'LOVE INSTITUTE')
 db_bg = get_setting('bg_color', '#0052cc')
 db_text = get_setting('text_color', '#1E293B')
 db_logo = get_setting('saved_logo_b64', 'None')
@@ -151,7 +159,7 @@ db_logo = get_setting('saved_logo_b64', 'None')
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (LIST & DATA VIEW FIXED)
+# 🛡️ MODE 1: ADMIN SECURE CONTROL PANEL (WITH ROW-SELECT DELETE)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -162,17 +170,15 @@ if app_mode == "🛡️ Admin Panel":
         
         # --- SUBSECTION 1: LAYOUT & LOGO DESIGNER ---
         st.subheader("🎨 Custom Design & Brand Assets")
-        new_title = st.text_input("Institute / School Name:", db_title[1] if isinstance(db_title, tuple) else db_title)
-        new_bg = st.color_picker("Header Top Theme Color:", db_bg[1] if isinstance(db_bg, tuple) else db_bg)
-        new_text = st.color_picker("Student Name Text Color:", db_text[1] if isinstance(db_text, tuple) else db_text)
+        new_title = st.text_input("Institute / School Name:", db_title)
+        new_bg = st.color_picker("Header Top Theme Color:", db_bg)
+        new_text = st.color_picker("Student Name Text Color:", db_text)
         
-        # Permanent Logo Display & File Handler Trigger
         st.write("")
         st.markdown("##### 🏢 Permanent Institute Logo Status")
-        current_logo_val = db_logo[1] if isinstance(db_logo, tuple) else db_logo
-        if current_logo_val != "None":
+        if db_logo != "None" and db_logo != "":
             try:
-                st.image(io.BytesIO(base64.b64decode(current_logo_val)), width=80, caption="Saved Current Logo")
+                st.image(io.BytesIO(base64.b64decode(db_logo)), width=80, caption="Saved Current Logo")
             except Exception:
                 pass
             
@@ -180,15 +186,10 @@ if app_mode == "🛡️ Admin Panel":
         if logo_file is not None:
             logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
             save_setting('saved_logo_b64', logo_b64_str)
-            st.success("🎉 Logo permanently locked in database!")
+            st.success("🎉 Logo permanently locked in SQLite!")
             st.rerun()
 
-        # Design configuration state sync checker
-        actual_title = db_title[1] if isinstance(db_title, tuple) else db_title
-        actual_bg = db_bg[1] if isinstance(db_bg, tuple) else db_bg
-        actual_text = db_text[1] if isinstance(db_text, tuple) else db_text
-        
-        if new_title != actual_title or new_bg != actual_bg or new_text != actual_text:
+        if new_title != db_title or new_bg != db_bg or new_text != db_text:
             save_setting('header_title', new_title)
             save_setting('bg_color', new_bg)
             save_setting('text_color', new_text)
@@ -197,15 +198,15 @@ if app_mode == "🛡️ Admin Panel":
         # --- SUBSECTION 2: BATCH CSV IMPORTER ---
         st.markdown("---")
         st.subheader("📦 Bulk CSV Data Importer Dashboard")
-        st.caption("💡 Apni 25 columns wali standard sheet upload karein. Sabhi details (Mobile, Father Name, Trade) auto-fetch ho jayengi.")
+        st.caption("💡 Apni 25 columns wali standard sheet upload karein. Sabhi details auto-fetch ho jayengi.")
         
-        uploaded_csv = st.file_uploader("Select Database Spreadsheet (.CSV File Only)", type=["csv"])
+        uploaded_csv = st.file_uploader("Select Database Spreadsheet (.CSV)", type=["csv"])
         if uploaded_csv is not None:
             file_contents = uploaded_csv.getvalue().decode("utf-8-sig").splitlines()
             reader = csv.DictReader(file_contents)
             reader.fieldnames = [f.strip() for f in reader.fieldnames] if reader.fieldnames else []
             
-            conn = sqlite3.connect('students_database.db')
+            conn = get_db_connection()
             cursor = conn.cursor()
             
             count = 0
@@ -250,11 +251,11 @@ if app_mode == "🛡️ Admin Panel":
             st.success(f"✅ Data Synchronized! Total {count} records saved cleanly.")
             st.rerun()
 
-        # --- SUBSECTION 3: DATA GRID LIST VIEWER ---
+        # --- SUBSECTION 3: DATA GRID LIST VIEWER WITH MANUALLY ROW SELECTION ---
         st.markdown("---")
         st.subheader("📋 Live Database Uploaded List")
         
-        conn = sqlite3.connect('students_database.db')
+        conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM students')
         rows = cursor.fetchall()
@@ -265,117 +266,55 @@ if app_mode == "🛡️ Admin Panel":
                 "Application Number", "Student Name", "Samagra ID", "Father Name", "Mother Name",
                 "DOB", "Gender", "Admission Year", "Trade Name", "Trade Type", "Mobile No",
                 "Email", "Category", "EWS", "Minority", "Passing Year", "Board Name", "Domicile",
-                "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "E-District"
+                "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "Trainee E-District"
             ]
             df_full = pd.DataFrame(rows, columns=columns_list)
             
-            # Full table rendering inside UI screen natively
-            st.dataframe(df_full, use_container_width=True)
+            # Table me click selection column insert karna toggle control ke liye
+            df_full.insert(0, "Select Row to Delete", False)
+            
+            # Data Editor block implementation for checkbox controls
+            edited_df = st.data_editor(
+                df_full,
+                hide_index=True,
+                disabled=[c for c in columns_list], # Baaki fields locked rahenge
+                use_container_width=False
+            )
+            
+            # Selected checked rows filter layout
+            selected_rows = edited_df[edited_df["Select Row to Delete"] == True]
             st.write(f"Total Permanent Strength: **{len(rows)}** Students found in database.")
             
-            st.write("")
-            if st.button("🗑️ Clear All Permanent Records", key="clear_db_btn"):
-                conn = sqlite3.connect('students_database.db')
-                cursor = conn.cursor()
-                cursor.execute('DELETE FROM students')
-                conn.commit()
-                conn.close()
-                st.warning("🚨 Complete student dataset deleted from server storage!")
-                st.rerun()
+            # Action Controls Buttons Layout structure
+            col_del1, col_del2 = st.columns(2)
+            
+            with col_del1:
+                # SINGLE SELECT DELETION TRIGGER
+                if st.button("🗑️ Delete Selected Student(s)", key="del_selected"):
+                    if not selected_rows.empty:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        for app_no in selected_rows["Application Number"]:
+                            cursor.execute('DELETE FROM students WHERE app_no = ?', (str(app_no),))
+                        conn.commit()
+                        conn.close()
+                        st.success(f"🚨 Selected ({len(selected_rows)}) records permanently removed!")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ Kripya delete karne ke liye pehle list me kisi row ke aage check-box par click karein.")
+                        
+            with col_del2:
+                # BATCH PURGE CONTROL
+                if st.button("🚨 Clear Entire Database Records", key="clear_db_btn"):
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute('DELETE FROM students')
+                    conn.commit()
+                    conn.close()
+                    st.warning("🚨 Complete student database deleted!")
+                    st.rerun()
         else:
-            st.info("📂 Database is currently empty. Upload a clean CSV file above to populate data.")
+            st.info("📂 Database is currently empty. Upload your clean CSV file above to populate data.")
 
     elif admin_pass != "":
         st.error("❌ Galat Password! Access Denied.")
-
-# ------------------------------------------
-# 🎓 MODE 2: STUDENT PORTAL SECTION (COMPLETE FIXED)
-# ------------------------------------------
-else:
-    st.header("🎓 Student Self-Service Hub")
-    
-    # 1. Check karein ki database me data maujood hai ya nahi
-    conn = sqlite3.connect('students_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM students')
-    db_count = cursor.fetchone()
-    conn.close()
-    
-    if db_count and db_count[0] == 0:
-        st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
-    else:
-        # 2. Student se Application Number input lena
-        search_app = st.text_input("Apna Application Number Type Karein:", placeholder="Eg. APP202601, 54321...").strip()
-        
-        if search_app:
-            # 3. Database se Student ki details extract karna
-            conn = sqlite3.connect('students_database.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM students WHERE app_no = ?', (search_app,))
-            result = cursor.fetchone()
-            conn.close()
-            
-            if result:
-                # 4. Database ke saare columns ko fixed array index se tuple unpacking dwara map karna
-                student_data_map = {
-                    'app_no': result[0],
-                    'name': result[1],
-                    'samagra_id': result[2],
-                    'father_name': result[3],
-                    'mother_name': result[4],
-                    'dob': result[5],
-                    'gender': result[6],
-                    'admission_year': result[7],
-                    'trade_name': result[8],
-                    'trade_type': result[9],
-                    'mobile': result[10],
-                    'email': result[11]
-                }
-                
-                st.success(f"🎯 Record Found! Hello, {student_data_map['name']}")
-                
-                # Screen par verified profile values show karna
-                st.write("### 📋 Aapki Verified Details:")
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.write(f"🔹 **Father Name:** {student_data_map['father_name']}")
-                    st.write(f"🔹 **DOB (Birth Date):** {student_data_map['dob']}")
-                with col_b:
-                    st.write(f"🔹 **Trade/Course:** {student_data_map['trade_name']}")
-                    st.write(f"🔹 **Mobile No:** {student_data_map['mobile']}")
-                    
-                # 5. Student ki Photo upload karne ka slot trigger
-                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
-                
-                if student_photo is not None:
-                    # Database settings ko safely string format me treat karna (Tuple safety layer)
-                    actual_bg = db_bg[0] if isinstance(db_bg, tuple) else db_bg
-                    actual_text = db_text[0] if isinstance(db_text, tuple) else db_text
-                    actual_title = db_title[0] if isinstance(db_title, tuple) else db_title
-                    actual_logo = db_logo[0] if isinstance(db_logo, tuple) else db_logo
-
-                    # ID card image bytes generate karna
-                    card_bytes = generate_dynamic_card(
-                        student_dict=student_data_map,
-                        photo_file=student_photo,
-                        bg_color=actual_bg,
-                        text_color=actual_text,
-                        header_title=actual_title,
-                        logo_base64=actual_logo
-                    )
-                    
-                    st.write("### 🪪 Aapka Live ID Card Preview:")
-                    # Screen par premium card output render karna
-                    st.image(card_bytes, width=270)
-                    
-                    # Instant Action Download Button
-                    st.download_button(
-                        label="📥 Download My ID Card", 
-                        data=card_bytes, 
-                        file_name=f"ID_{search_app}.png", 
-                        mime="image/png"
-                    )
-                    st.balloons() # Visual celebration graphic animation trigger
-            else:
-                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
-    
