@@ -231,7 +231,7 @@ if app_mode == "🛡️ Admin Panel":
             st.write("📂 Database is currently empty.")
 
 # ==========================================
-# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL (FIXED)
+# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL (FIXED FOR YOUR COLUMNS)
 # ==========================================
 st.header("🎓 Student Self-Service Hub")
 
@@ -239,7 +239,7 @@ st.header("🎓 Student Self-Service Hub")
 conn = sqlite3.connect('dynamic_students_db.db')
 cursor = conn.cursor()
 cursor.execute('SELECT COUNT(*) FROM students')
-db_count = cursor.fetchone()[0] # [0] lagaya taaki direct number mile
+db_count = cursor.fetchone()[0]
 conn.close()
 
 if db_count == 0:
@@ -257,8 +257,8 @@ else:
         conn.close()
         
         if result:
-            s_name = result[0] # Fixed: Direct student ka naam nikalna
-            s_json = result[1] # Fixed: Direct extra data nikalna
+            s_name = result[0]   # Student ka Name tuple se nikala
+            s_json = result[1]   # Extra data JSON tuple se nikala
             
             # Admin dwara upload kiye gaye dynamic fields ko decode karna
             extra_fields_loaded = json.loads(s_json)
@@ -294,4 +294,4 @@ else:
                     mime="image/png"
                 )
         else:
-            st.error("🔍 Yeh Application Number records me nahi mila.")
+            st.error("🔍 Yeh Application Number records me nahi mila. Kripya sahi Number dalein.")
