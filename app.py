@@ -328,3 +328,48 @@ else:
                     st.balloons() # Success celebration graphics trigger
             else:
                 st.error("🔍 Yeh Application Number records me nahi mila. Kripya sahi input enter karein.")
+
+        # --- SUBSECTION 3: DATA GRID LIST VIEWER (DELETE FIXED) ---
+        st.markdown("---")
+        st.subheader("📋 Live Database Uploaded List")
+        
+        conn = sqlite3.connect('dynamic_students_db.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT app_no, name, extra_data FROM students')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if rows:
+            table_data = []
+            for r in rows:
+                row_dict = {
+                    "Application Number": r[0], 
+                    "Student Name": r[1]
+                }
+                try:
+                    extra_meta = json.loads(r[2])
+                    if isinstance(extra_meta, dict):
+                        row_dict.update(extra_meta)
+                except Exception:
+                    pass
+                table_data.append(row_dict)
+                
+            import pandas as pd
+            st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+            st.write(f"Total Database Strength: **{len(rows)}** Students.")
+            
+            # FIXED DELETE BUTTON LOGIC WITH REFRESH STATE
+            if st.button("🗑️ Clear All Permanent Records", key="clear_db_btn"):
+                conn = sqlite3.connect('dynamic_students_db.db')
+                cursor = conn.cursor()
+                # Saara student data table saaf karna
+                cursor.execute('DELETE FROM students')
+                conn.commit()
+                conn.close()
+                
+                st.success("🚨 Database completely cleared successfully!")
+                # Instant page ko reset karna taaki list turant gayab ho jaye
+                st.rerun()
+        else:
+            st.info("📂 Database is currently empty. Upload a clean CSV file above to populate data.")
+            
