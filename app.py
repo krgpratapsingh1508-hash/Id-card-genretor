@@ -15,6 +15,7 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
+    # Fixed Schema Structure (Exactly 24 columns defined)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
             app_no TEXT PRIMARY KEY,
@@ -159,7 +160,7 @@ db_logo = get_setting('saved_logo_b64', 'None')
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN SECURE CONTROL PANEL (WITH ROW-SELECT DELETE)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER (OPERATIONAL FIXED)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -251,7 +252,7 @@ if app_mode == "🛡️ Admin Panel":
             st.success(f"✅ Data Synchronized! Total {count} records saved cleanly.")
             st.rerun()
 
-        # --- SUBSECTION 3: DATA GRID LIST VIEWER WITH MANUALLY ROW SELECTION ---
+        # --- SUBSECTION 3: DATA GRID LIST VIEWER WITH AUTO-COLUMN PARSING ---
         st.markdown("---")
         st.subheader("📋 Live Database Uploaded List")
         
@@ -268,28 +269,22 @@ if app_mode == "🛡️ Admin Panel":
                 "Email", "Category", "EWS", "Minority", "Passing Year", "Board Name", "Domicile",
                 "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "Trainee E-District"
             ]
-            df_full = pd.DataFrame(rows, columns=columns_list)
             
-            # Table me click selection column insert karna toggle control ke liye
+            df_full = pd.DataFrame(rows, columns=columns_list)
             df_full.insert(0, "Select Row to Delete", False)
             
-            # Data Editor block implementation for checkbox controls
             edited_df = st.data_editor(
                 df_full,
                 hide_index=True,
-                disabled=[c for c in columns_list], # Baaki fields locked rahenge
+                disabled=[c for c in columns_list],
                 use_container_width=False
             )
             
-            # Selected checked rows filter layout
             selected_rows = edited_df[edited_df["Select Row to Delete"] == True]
             st.write(f"Total Permanent Strength: **{len(rows)}** Students found in database.")
             
-            # Action Controls Buttons Layout structure
             col_del1, col_del2 = st.columns(2)
-            
             with col_del1:
-                # SINGLE SELECT DELETION TRIGGER
                 if st.button("🗑️ Delete Selected Student(s)", key="del_selected"):
                     if not selected_rows.empty:
                         conn = get_db_connection()
@@ -298,13 +293,12 @@ if app_mode == "🛡️ Admin Panel":
                             cursor.execute('DELETE FROM students WHERE app_no = ?', (str(app_no),))
                         conn.commit()
                         conn.close()
-                        st.success(f"🚨 Selected ({len(selected_rows)}) records permanently removed!")
+                        st.success(f"🚨 Selected ({len(selected_rows)}) records removed successfully!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ Kripya delete karne ke liye pehle list me kisi row ke aage check-box par click karein.")
+                        st.warning("⚠️ Kripya delete karne ke liye pehle kisi checkbox par click karein.")
                         
             with col_del2:
-                # BATCH PURGE CONTROL
                 if st.button("🚨 Clear Entire Database Records", key="clear_db_btn"):
                     conn = get_db_connection()
                     cursor = conn.cursor()
@@ -314,7 +308,102 @@ if app_mode == "🛡️ Admin Panel":
                     st.warning("🚨 Complete student database deleted!")
                     st.rerun()
         else:
-            st.info("📂 Database is currently empty. Upload your clean CSV file above to populate data.")
+            st.info("📂 Database is currently empty. Upload a clean CSV file above.")
 
     elif admin_pass != "":
         st.error("❌ Galat Password! Access Denied.")
+
+# ------------------------------------------
+# 🎓 MODE 2: STUDENT PORTAL SECTION (FINAL CORE FIXED)
+# ------------------------------------------
+else:
+    st.header("🎓 Student Self-Service Hub")
+    
+    # 1. Check karein ki database me data maujood hai ya nahi
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM students')
+    db_count = cursor.fetchone()
+    conn.close()
+    
+    # Tuple format validation layout filter logic block
+    actual_count = db_count[0] if isinstance(db_count, tuple) else db_count
+    
+    if actual_count == 0:
+        st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
+    else:
+        # 2. Student se Application Number input lena
+        search_app = st.text_input("Apna Application Number Type Karein:", placeholder="Eg. APP202601, 54321...").strip()
+        
+        if search_app:
+            # 3. Database se Student ki details extract karna
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM students WHERE app_no = ?', (search_app,))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                # 4. Database ke saare columns ko fixed array index se tuple unpacking dwara map karna
+                student_data_map = {
+                    'app_no': str(result[0]),
+                    'name': str(result[1]),
+                    'samagra_id': str(result[2]),
+                    'father_name': str(result[3]),
+                    'mother_name': str(result[4]),
+                    'dob': str(result[5]),
+                    'gender': str(result[6]),
+                    'admission_year': str(result[7]),
+                    'trade_name': str(result[8]),
+                    'trade_type': str(result[9]),
+                    'mobile': str(result[10]),
+                    'email': str(result[11])
+                }
+                
+                st.success(f"🎯 Record Found! Hello, {student_data_map['name']}")
+                
+                # Screen par verified profile values show karna
+                st.write("### 📋 Aapki Verified Details:")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.write(f"🔹 **Father Name:** {student_data_map['father_name']}")
+                    st.write(f"🔹 **DOB (Birth Date):** {student_data_map['dob']}")
+                with col_b:
+                    st.write(f"🔹 **Trade/Course:** {student_data_map['trade_name']}")
+                    st.write(f"🔹 **Mobile No:** {student_data_map['mobile']}")
+                    
+                # 5. Student ki Photo upload karne ka slot trigger
+                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
+                
+                if student_photo is not None:
+                    # Database parameters unpacked cleanly to protect PIL imaging rendering thread crashes
+                    actual_bg = db_bg if not isinstance(db_bg, tuple) else db_bg[0]
+                    actual_text = db_text if not isinstance(db_text, tuple) else db_text[0]
+                    actual_title = db_title if not isinstance(db_title, tuple) else db_title[0]
+                    actual_logo = db_logo if not isinstance(db_logo, tuple) else db_logo[0]
+
+                    # ID card image bytes generate karna
+                    card_bytes = generate_dynamic_card(
+                        student_dict=student_data_map,
+                        photo_file=student_photo,
+                        bg_color=actual_bg,
+                        text_color=actual_text,
+                        header_title=actual_title,
+                        logo_base64=actual_logo
+                    )
+                    
+                    st.write("### 🪪 Aapka Live ID Card Preview:")
+                    # Screen par premium card output render karna
+                    st.image(card_bytes, width=270)
+                    
+                    # Instant Action Download Button
+                    st.download_button(
+                        label="📥 Download My ID Card", 
+                        data=card_bytes, 
+                        file_name=f"ID_{search_app}.png", 
+                        mime="image/png"
+                    )
+                    st.balloons() # Success graphics animation template sequence
+            else:
+                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
+                
