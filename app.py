@@ -2,15 +2,14 @@ import streamlit as st
 import csv
 import io
 import sqlite3
-import json
+import pandas as pd
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ MASTER DATABASE ENGINE (FIXED SINGLE DB NAME)
+# 🗄️ MASTER DATABASE ENGINE
 # ==========================================
 def init_db():
-    # Poore project ke liye ek hi single database file use hogi
     conn = sqlite3.connect('students_database.db')
     cursor = conn.cursor()
     cursor.execute('''
@@ -65,18 +64,16 @@ def save_setting(key, value):
     conn.commit()
     conn.close()
 
-# Database initialization execution
 init_db()
 
 # ==========================================
-# 🎨 PREMIUM CIRCULAR ID CARD GENERATOR ENGINE
+# 🎨 PREMIUM CIRCULAR ID CARD ENGINE
 # ==========================================
 def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None):
     card_height = 580 
     card = Image.new("RGB", (420, card_height), "#F8FAFC") 
     draw = ImageDraw.Draw(card)
     
-    # Top Header Strip
     draw.rectangle([(0, 0), (420, 140)], fill=bg_color)
     
     try:
@@ -88,7 +85,6 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     except IOError:
         font_header = font_sub = font_name = font_text = font_label = ImageFont.load_default()
 
-    # Logo placement handler
     header_text_x = 210
     if logo_base64 and logo_base64 != "None":
         try:
@@ -100,11 +96,9 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         except Exception:
             pass
 
-    # Render Header Text strings
     draw.text((header_text_x, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm" if header_text_x==210 else "lm")
     draw.text((header_text_x, 90), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor="mm" if header_text_x==210 else "lm")
     
-    # Rounded Avatar Circular Frame Layout
     cx, cy, r = 210, 215, 65
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
     
@@ -122,11 +116,9 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
     
-    # Student Full Name Section
     draw.text((210, 310), str(student_dict['name']).upper(), fill=text_color, font=font_name, anchor="mm")
     draw.line([(50, 335), (370, 335)], fill="#CBD5E1", width=2)
     
-    # Mapping table array data structure fields values
     display_fields = [
         ("Application No :", student_dict['app_no']),
         ("Father Name :", student_dict['father_name']),
@@ -141,7 +133,6 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.text((185, current_y), f"{val}", fill="#0F172A", font=font_text)
         current_y += 36
         
-    # Standard signatory dark banner bottom bar
     draw.rectangle([(0, card_height - 60), (420, card_height)], fill="#1E293B")
     draw.text((210, card_height - 30), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
     
@@ -149,9 +140,8 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     card.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
 
-
 # ==========================================
-# 🌐 MAIN ROUTER FRAMEWORK WEB SYSTEM UI
+# 🌐 ROUTER MAIN CORE UI
 # ==========================================
 db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
 db_bg = get_setting('bg_color', '#0052cc')
@@ -161,7 +151,7 @@ db_logo = get_setting('saved_logo_b64', 'None')
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (FINAL WORKING)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER (LIST & DATA VIEW FIXED)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -172,16 +162,17 @@ if app_mode == "🛡️ Admin Panel":
         
         # --- SUBSECTION 1: LAYOUT & LOGO DESIGNER ---
         st.subheader("🎨 Custom Design & Brand Assets")
-        new_title = st.text_input("Institute / School Name:", db_title)
-        new_bg = st.color_picker("Header Top Theme Color:", db_bg)
-        new_text = st.color_picker("Student Name Text Color:", db_text)
+        new_title = st.text_input("Institute / School Name:", db_title[1] if isinstance(db_title, tuple) else db_title)
+        new_bg = st.color_picker("Header Top Theme Color:", db_bg[1] if isinstance(db_bg, tuple) else db_bg)
+        new_text = st.color_picker("Student Name Text Color:", db_text[1] if isinstance(db_text, tuple) else db_text)
         
         # Permanent Logo Display & File Handler Trigger
         st.write("")
         st.markdown("##### 🏢 Permanent Institute Logo Status")
-        if db_logo != "None":
+        current_logo_val = db_logo[1] if isinstance(db_logo, tuple) else db_logo
+        if current_logo_val != "None":
             try:
-                st.image(io.BytesIO(base64.b64decode(db_logo)), width=80, caption="Saved Current Logo")
+                st.image(io.BytesIO(base64.b64decode(current_logo_val)), width=80, caption="Saved Current Logo")
             except Exception:
                 pass
             
@@ -192,7 +183,12 @@ if app_mode == "🛡️ Admin Panel":
             st.success("🎉 Logo permanently locked in database!")
             st.rerun()
 
-        if new_title != db_title or new_bg != db_bg or new_text != db_text:
+        # Design configuration state sync checker
+        actual_title = db_title[1] if isinstance(db_title, tuple) else db_title
+        actual_bg = db_bg[1] if isinstance(db_bg, tuple) else db_bg
+        actual_text = db_text[1] if isinstance(db_text, tuple) else db_text
+        
+        if new_title != actual_title or new_bg != actual_bg or new_text != actual_text:
             save_setting('header_title', new_title)
             save_setting('bg_color', new_bg)
             save_setting('text_color', new_text)
@@ -220,7 +216,6 @@ if app_mode == "🛡️ Admin Panel":
                 if not r_app or r_app == "":
                     continue
                 
-                # Dynamic mapping sequence alignment for exactly 24 slots fields matching the table schema
                 cursor.execute('''
                     INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ''', (
@@ -266,7 +261,6 @@ if app_mode == "🛡️ Admin Panel":
         conn.close()
         
         if rows:
-            import pandas as pd
             columns_list = [
                 "Application Number", "Student Name", "Samagra ID", "Father Name", "Mother Name",
                 "DOB", "Gender", "Admission Year", "Trade Name", "Trade Type", "Mobile No",
@@ -274,8 +268,10 @@ if app_mode == "🛡️ Admin Panel":
                 "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "E-District"
             ]
             df_full = pd.DataFrame(rows, columns=columns_list)
-            st.dataframe(df_full, use_container_width=False)
-            st.write(f"Total Permanent Strength: **{len(rows)}** Students found in local database.")
+            
+            # Full table rendering inside UI screen natively
+            st.dataframe(df_full, use_container_width=True)
+            st.write(f"Total Permanent Strength: **{len(rows)}** Students found in database.")
             
             st.write("")
             if st.button("🗑️ Clear All Permanent Records", key="clear_db_btn"):
@@ -305,7 +301,7 @@ else:
     db_count = cursor.fetchone()
     conn.close()
     
-    if db_count[0] == 0:
+    if db_count and db_count[0] == 0:
         st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
     else:
         # 2. Student se Application Number input lena
@@ -352,14 +348,20 @@ else:
                 student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
                 
                 if student_photo is not None:
+                    # Database settings ko safely string format me treat karna (Tuple safety layer)
+                    actual_bg = db_bg[0] if isinstance(db_bg, tuple) else db_bg
+                    actual_text = db_text[0] if isinstance(db_text, tuple) else db_text
+                    actual_title = db_title[0] if isinstance(db_title, tuple) else db_title
+                    actual_logo = db_logo[0] if isinstance(db_logo, tuple) else db_logo
+
                     # ID card image bytes generate karna
                     card_bytes = generate_dynamic_card(
                         student_dict=student_data_map,
                         photo_file=student_photo,
-                        bg_color=db_bg,
-                        text_color=db_text,
-                        header_title=db_title,
-                        logo_base64=db_logo
+                        bg_color=actual_bg,
+                        text_color=actual_text,
+                        header_title=actual_title,
+                        logo_base64=actual_logo
                     )
                     
                     st.write("### 🪪 Aapka Live ID Card Preview:")
@@ -376,4 +378,4 @@ else:
                     st.balloons() # Visual celebration graphic animation trigger
             else:
                 st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
-                
+    
