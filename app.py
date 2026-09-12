@@ -231,7 +231,7 @@ if app_mode == "🛡️ Admin Panel":
             st.write("📂 Database is currently empty.")
 
 # ==========================================
-# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL
+# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL (FIXED)
 # ==========================================
 st.header("🎓 Student Self-Service Hub")
 
@@ -239,7 +239,7 @@ st.header("🎓 Student Self-Service Hub")
 conn = sqlite3.connect('dynamic_students_db.db')
 cursor = conn.cursor()
 cursor.execute('SELECT COUNT(*) FROM students')
-db_count = cursor.fetchone()
+db_count = cursor.fetchone()[0] # [0] lagaya taaki direct number mile
 conn.close()
 
 if db_count == 0:
@@ -257,13 +257,16 @@ else:
         conn.close()
         
         if result:
-            s_name, s_json = result
+            s_name = result[0] # Fixed: Direct student ka naam nikalna
+            s_json = result[1] # Fixed: Direct extra data nikalna
+            
             # Admin dwara upload kiye gaye dynamic fields ko decode karna
             extra_fields_loaded = json.loads(s_json)
             
             st.success(f"🎯 Record Found! Hello, {s_name}")
             
             # Screen par details show karna
+            st.write("### 📋 Aapki Verified Details:")
             for lbl, vl in extra_fields_loaded.items():
                 st.write(f"🔹 **{lbl.title()}:** {vl}")
                 
