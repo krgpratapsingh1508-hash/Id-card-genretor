@@ -7,12 +7,12 @@ import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ PERMANENT DATABASE ENGINE (25 COLUMNS FIXED)
+# 🗄️ PERMANENT DATABASE ENGINE (24 COLUMNS FIXED)
 # ==========================================
 def init_db():
-    conn = sqlite3.connect('dynamic_students_db.db')
+    conn = sqlite3.connect('students_database.db')
     cursor = conn.cursor()
-    # Table columns updated according to your exact sheet structure
+    # Table schema with exact 24 slots mapped correctly
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
             app_no TEXT PRIMARY KEY,
@@ -51,7 +51,7 @@ def init_db():
     conn.close()
 
 def get_setting(key, default):
-    conn = sqlite3.connect('dynamic_students_db.db')
+    conn = sqlite3.connect('students_database.db')
     cursor = conn.cursor()
     cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
     row = cursor.fetchone()
@@ -59,24 +59,24 @@ def get_setting(key, default):
     return row[0] if row else default
 
 def save_setting(key, value):
-    conn = sqlite3.connect('dynamic_students_db.db')
+    conn = sqlite3.connect('students_database.db')
     cursor = conn.cursor()
     cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
     conn.commit()
     conn.close()
 
+# Database build sequence trigger
 init_db()
 
 # ==========================================
 # 🎨 PREMIUM CIRCULAR ID CARD ENGINE WITH LOGO
 # ==========================================
 def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None):
-    # Fixed proportional height logic
     card_height = 580 
     card = Image.new("RGB", (420, card_height), "#F8FAFC") 
     draw = ImageDraw.Draw(card)
     
-    # Top Header Banner
+    # Top Header Banner Shape
     draw.rectangle([(0, 0), (420, 140)], fill=bg_color)
     
     try:
@@ -88,7 +88,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     except IOError:
         font_header = font_sub = font_name = font_text = font_label = ImageFont.load_default()
 
-    # Image logo placement handler
+    # Brand image logo display block
     header_text_x = 210
     if logo_base64 and logo_base64 != "None":
         try:
@@ -100,11 +100,11 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         except Exception:
             pass
 
-    # Header Titles Text Render
+    # Header title string outputs
     draw.text((header_text_x, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm" if header_text_x==210 else "lm")
     draw.text((header_text_x, 90), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor="mm" if header_text_x==210 else "lm")
     
-    # Circular Profile Photo Frame Canvas Masking
+    # Rounded Profile Masking geometry structures
     cx, cy, r = 210, 215, 65
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
     
@@ -122,11 +122,11 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
     
-    # Student Full Name Text Header
+    # Name panel line break design patterns
     draw.text((210, 310), str(student_dict['name']).upper(), fill=text_color, font=font_name, anchor="mm")
     draw.line([(50, 335), (370, 335)], fill="#CBD5E1", width=2)
     
-    # Core Fields Selection mapping grid array for display layout
+    # Align values inside data list parameters map arrays
     display_fields = [
         ("Application No :", student_dict['app_no']),
         ("Father Name :", student_dict['father_name']),
@@ -141,7 +141,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.text((185, current_y), f"{val}", fill="#0F172A", font=font_text)
         current_y += 36
         
-    # Signatory Strip Footer Bar
+    # Bottom strip stamp panel
     draw.rectangle([(0, card_height - 60), (420, card_height)], fill="#1E293B")
     draw.text((210, card_height - 30), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
     
@@ -151,7 +151,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
 
 
 # ==========================================
-# 🌐 ROUTER MAIN FRAMEWORK
+# 🌐 MAIN PROCESS ROUTER LAYOUTS
 # ==========================================
 db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
 db_bg = get_setting('bg_color', '#0052cc')
@@ -161,7 +161,7 @@ db_logo = get_setting('saved_logo_b64', 'None')
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (OPERATIONAL ERROR FIXED)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER (COMPLETE FIXED)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -190,7 +190,7 @@ if app_mode == "🛡️ Admin Panel":
         if logo_file is not None:
             logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
             save_setting('saved_logo_b64', logo_b64_str)
-            st.success("🎉 Logo permanently locked in SQLite database!")
+            st.success("🎉 Logo permanently locked in database!")
             st.rerun()
 
         # Design configuration state sync checker
@@ -210,10 +210,10 @@ if app_mode == "🛡️ Admin Panel":
             file_contents = uploaded_csv.getvalue().decode("utf-8-sig").splitlines()
             reader = csv.DictReader(file_contents)
             
-            # Standardization loop to safely clear blank keys spaces from Excel outputs
+            # Excel columns ke extra white spaces ko clear karna
             reader.fieldnames = [f.strip() for f in reader.fieldnames] if reader.fieldnames else []
             
-            conn = sqlite3.connect('dynamic_students_db.db')
+            conn = sqlite3.connect('students_database.db')
             cursor = conn.cursor()
             
             count = 0
@@ -224,7 +224,7 @@ if app_mode == "🛡️ Admin Panel":
                 if not r_app or r_app == "":
                     continue
                 
-                # FIXED: Total exactly 24 '?' placeholders mapped correctly to table schema
+                # EXACTLY MATCHED: Total 24 placeholders mapped cleanly to match the database table schema
                 cursor.execute('''
                     INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ''', (
@@ -263,7 +263,7 @@ if app_mode == "🛡️ Admin Panel":
         st.markdown("---")
         st.subheader("📋 Live Database Uploaded List")
         
-        conn = sqlite3.connect('dynamic_students_db.db')
+        conn = sqlite3.connect('students_database.db')
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM students')
         rows = cursor.fetchall()
@@ -279,12 +279,13 @@ if app_mode == "🛡️ Admin Panel":
             ]
             df_full = pd.DataFrame(rows, columns=columns_list)
             
+            # Displays all columns with a responsive horizontal scrollbar natively
             st.dataframe(df_full, use_container_width=False)
             st.write(f"Total Permanent Strength: **{len(rows)}** Students found in local database.")
             
             st.write("")
             if st.button("🗑️ Clear All Permanent Records", key="clear_db_btn"):
-                conn = sqlite3.connect('dynamic_students_db.db')
+                conn = sqlite3.connect('students_database.db')
                 cursor = conn.cursor()
                 cursor.execute('DELETE FROM students')
                 conn.commit()
@@ -304,7 +305,7 @@ else:
     st.header("🎓 Student Self-Service Hub")
     
     # 1. Check karein ki database me data maujood hai ya nahi
-    conn = sqlite3.connect('dynamic_students_db.db')
+    conn = sqlite3.connect('students_database.db')
     cursor = conn.cursor()
     cursor.execute('SELECT COUNT(*) FROM students')
     db_count = cursor.fetchone()
@@ -318,14 +319,14 @@ else:
         
         if search_app:
             # 3. Database se Student ki details extract karna
-            conn = sqlite3.connect('dynamic_students_db.db')
+            conn = sqlite3.connect('students_database.db')
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM students WHERE app_no = ?', (search_app,))
             result = cursor.fetchone()
             conn.close()
             
             if result:
-                # 4. Database ke saare columns ko fixed array index se map karna
+                # 4. Database ke saare columns ko fixed array index se tuple unpacking dwara map karna
                 student_data_map = {
                     'app_no': result[0],
                     'name': result[1],
@@ -381,4 +382,5 @@ else:
                     st.balloons() # Visual celebration graphic animation trigger
             else:
                 st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
+                
                 
