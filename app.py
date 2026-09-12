@@ -1,21 +1,64 @@
 import streamlit as st
 import csv
 import io
-import os
+import sqlite3
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🎨 HIGH-QUALITY DYNAMIC ID CARD ENGINE
+# 🗄️ LOCAL DATABASE SETUP (SQLITE)
+# ==========================================
+# Yeh function database aur table banata hai agar pehle se na bani ho
+def init_db():
+    conn = sqlite3.connect('students_database.db')
+    cursor = conn.cursor()
+    # Student records table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS students (
+            roll TEXT PRIMARY KEY,
+            name TEXT,
+            course TEXT
+        )
+    ''')
+    # Admin layout settings table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Database se settings load karne ke liye helper function
+def get_setting(key, default):
+    conn = sqlite3.connect('students_database.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else default
+
+# Settings ko save/update karne ke liye function
+def save_setting(key, value):
+    conn = sqlite3.connect('students_database.db')
+    cursor = conn.cursor()
+    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
+    conn.commit()
+    conn.close()
+
+# Database initialize karein
+init_db()
+
+# ==========================================
+# 🎨 ID CARD DESIGN SYSTEM
 # ==========================================
 def generate_id_card(name, roll, course, photo_file, bg_color, text_color, header_title):
-    # Blank White Card Canvas (Standard Size: 400x600)
     card = Image.new("RGB", (400, 600), "#FFFFFF")
     draw = ImageDraw.Draw(card)
     
-    # 1. Custom Background Header
+    # Header Layout Area
     draw.rectangle([(0, 0), (400, 110)], fill=bg_color)
     
-    # Fonts load karna (Fallback to default if arial is missing)
     try:
         font_header = ImageFont.truetype("arial.ttf", 24)
         font_name = ImageFont.truetype("arial.ttf", 26)
@@ -23,173 +66,155 @@ def generate_id_card(name, roll, course, photo_file, bg_color, text_color, heade
     except IOError:
         font_header = font_name = font_text = ImageFont.load_default()
 
-    # 2. Dynamic Header Text
     draw.text((200, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm")
     
-    # 3. Student Photo Process (Agar student ne upload ki hai)
+    # Photo Frame Process
     if photo_file is not None:
         try:
             student_img = Image.open(photo_file)
-            # Photo ko passport size (120x140) me resize aur crop karna
             student_img = ImageOps.fit(student_img, (120, 140), Image.Resampling.LANCZOS)
-            # Photo ko card ke center me paste karna
             card.paste(student_img, (140, 140))
-            # Border draw karna photo ke charo taraf
             draw.rectangle([(140, 140), (260, 280)], outline=bg_color, width=3)
         except Exception:
-            # Dropback to default avatar if image fails
             draw.rectangle([(140, 140), (260, 280)], fill="#E1E4E8", outline=bg_color, width=2)
-            draw.text((200, 210), "PHOTO ERROR", fill="#586069", font=font_text, anchor="mm")
+            draw.text((200, 210), "IMAGE ERROR", fill="#586069", font=font_text, anchor="mm")
     else:
-        # Default placeholder icon agar photo nahi hai
         draw.rectangle([(140, 140), (260, 280)], fill="#E1E4E8", outline=bg_color, width=2)
         draw.text((200, 210), "[ PHOTO ]", fill="#586069", font=font_text, anchor="mm")
     
-    # 4. Student Text Details
-    draw.text((200, 320), name.upper(), fill=text_color, font=font_name, anchor="mm")
-    
-    # Info Labels
-    draw.text((60, 380), f"Roll No:", fill=bg_color, font=font_text)
+    # Profile Text Fields
+    draw.text((200, 320), str(name).upper(), fill=text_color, font=font_name, anchor="mm")
+    draw.text((60, 380), "Roll No:", fill=bg_color, font=font_text)
     draw.text((160, 380), f"{roll}", fill=text_color, font=font_text)
-    
-    draw.text((60, 420), f"Course:", fill=bg_color, font=font_text)
+    draw.text((60, 420), "Course:", fill=bg_color, font=font_text)
     draw.text((160, 420), f"{course}", fill=text_color, font=font_text)
+    draw.text((60, 460), "Validity:", fill=bg_color, font=font_text)
+    draw.text((160, 460), "2026 - 2027", fill=text_color, font=font_text)
     
-    draw.text((60, 460), f"Validity:", fill=bg_color, font=font_text)
-    draw.text((160, 460), f"2026 - 2027", fill=text_color, font=font_text)
-    
-    # 5. Dark Footer
+    # Card Footer Section
     draw.rectangle([(0, 540), (400, 600)], fill="#222222")
     draw.text((200, 570), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
     
-    # Save Image to byte buffer
     img_byte_arr = io.BytesIO()
     card.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
 
 
 # ==========================================
-# 💾 APP STATE MANAGEMENT (DATABASE PRESERVER)
+# 🌐 MAIN WEB INTERFACE UI
 # ==========================================
-if 'student_db' not in st.session_state:
-    st.session_state['student_db'] = []  # Excel/CSV ka data store karne ke liye
+st.set_page_config(page_title="Permanent Local DB ID System", page_icon="🪪")
 
-# Default Design Configuration Settings
-if 'bg_color' not in st.session_state:
-    st.session_state['bg_color'] = "#0052cc"
-if 'text_color' not in st.session_state:
-    st.session_state['text_color'] = "#333333"
-if 'header_title' not in st.session_state:
-    st.session_state['header_title'] = "UNIVERSAL INSTITUTE"
+# Persistent state configurations loading dynamically from DB
+db_title = get_setting('header_title', 'UNIVERSAL INSTITUTE')
+db_bg = get_setting('bg_color', '#0052cc')
+db_text = get_setting('text_color', '#333333')
 
-
-# ==========================================
-# 🌐 MAIN ROUTER NAVIGATION UI
-# ==========================================
-st.set_page_config(page_title="Smart ID Generator", page_icon="🪪", layout="centered")
-
-# Top Navigation Tabs
-app_mode = st.sidebar.radio("Navigation Menu", ["🎓 Student Portal", "🛡️ Admin Panel"])
+app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN PANEL (WITH PASSWORD & DESIGNER)
+# 🛡️ SYSTEM SECTION 1: ADMIN CONTROL PANEL
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
-    st.title("🛡️ Admin Security Control Center")
+    st.header("🛡️ Admin Secure Access Control")
+    admin_pass = st.text_input("Admin Password Likhein:", type="password")
     
-    # Password Input Mask
-    password_input = st.text_input("Admin Password Likhein", type="password")
-    
-    if password_input == "daminimylove":
-        st.success("🔓 Access Granted! Welcome Admin.")
+    if admin_pass == "daminimylove":
+        st.success("🔓 Access Approved!")
         
-        st.markdown("---")
-        st.subheader("🎨 Live Card Design Settings")
+        st.subheader("🎨 Custom Design Control")
+        new_title = st.text_input("Institute Name", db_title)
+        new_bg = st.color_picker("Theme Color", db_bg)
+        new_text = st.color_picker("Text Color", db_text)
         
-        # Design configuration tools
-        col1, col2 = st.columns(2)
-        with col1:
-            st.session_state['header_title'] = st.text_input("Institute / School Name", st.session_state['header_title'])
-            st.session_state['bg_color'] = st.color_picker("Header Theme Color (Primary)", st.session_state['bg_color'])
-        with col2:
-            st.session_state['text_color'] = st.color_picker("Text Color (Secondary)", st.session_state['text_color'])
-            st.write("\n")
-            st.info("💡 Jo color aap yahan chunenge, wahi same look student ko unke portal par dikhega.")
+        # Agar admin layout settings badalta hai toh DB me update karein
+        if new_title != db_title or new_bg != db_bg or new_text != db_text:
+            save_setting('header_title', new_title)
+            save_setting('bg_color', new_bg)
+            save_setting('text_color', new_text)
+            st.rerun()
 
         st.markdown("---")
-        st.subheader("📊 Bulk Student Data Importer")
-        uploaded_csv = st.file_uploader("Students ki Data CSV File Upload Karein", type=["csv"])
+        st.subheader("📦 Database Management Tracker")
         
+        uploaded_csv = st.file_uploader("Upload Student Database (CSV File)", type=["csv"])
         if uploaded_csv is not None:
             file_contents = uploaded_csv.getvalue().decode("utf-8").splitlines()
             reader = csv.DictReader(file_contents)
             
-            # Reset and fill the state database
-            st.session_state['student_db'] = []
-            for row in reader:
-                st.session_state['student_db'].append({
-                    "name": row.get('Name', row.get('name', 'Unknown')),
-                    "roll": row.get('Roll', row.get('roll', '000')).strip(),
-                    "course": row.get('Course', row.get('course', 'N/A'))
-                })
-            st.success(f"📦 Database updated successfully! Total {len(st.session_state['student_db'])} students records loaded.")
+            # Database connection open karke data push karna
+            conn = sqlite3.connect('students_database.db')
+            cursor = conn.cursor()
             
-    elif password_input != "":
-        st.error("❌ Galat Password! Access Denied.")
+            count = 0
+            for row in reader:
+                r_roll = row.get('Roll', row.get('roll', '000')).strip()
+                r_name = row.get('Name', row.get('name', 'Unknown'))
+                r_course = row.get('Course', row.get('course', 'N/A'))
+                
+                # INSERT OR REPLACE taaki duplicate roll no par data overwrite/update ho jaye
+                cursor.execute('INSERT OR REPLACE INTO students (roll, name, course) VALUES (?, ?, ?)', (r_roll, r_name, r_course))
+                count += 1
+                
+            conn.commit()
+            conn.close()
+            st.success(f"✅ Database updated successfully! Total {count} records added/updated permanently.")
+
+        # Data Delete karne ka manual control option
+        st.write("")
+        if st.button("🗑️ Clear Entire Database Records"):
+            conn = sqlite3.connect('students_database.db')
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM students')
+            conn.commit()
+            conn.close()
+            st.warning("🚨 Saara student data permanent database se delete kar diya gaya hai!")
+            
+    elif admin_pass != "":
+        st.error("❌ Galat Password!")
 
 # ------------------------------------------
-# 🎓 MODE 2: STUDENT PORTAL (SELF-SERVICE GENERATOR)
+# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL
 # ------------------------------------------
 else:
-    st.title("🎓 Student Smart Self-Service Portal")
-    st.write("Apna Roll Number dalein, Photo upload karein aur ID Card download karein.")
+    st.header("🎓 Student Card Download Counter")
     
-    if not st.session_state['student_db']:
-        st.warning("⚠️ Abhi Admin ne koi data upload nahi kiya hai. Kripya pehle Admin Panel me jaakar CSV parse karein.")
+    # Check karein ki database me data maujood hai ya nahi
+    conn = sqlite3.connect('students_database.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) FROM students')
+    db_count = cursor.fetchone()[0]
+    conn.close()
+    
+    if db_count == 0:
+        st.warning("⚠️ Configuration Missing! Admin ne abhi tak database me koi student record upload nahi kiya hai.")
     else:
-        # Student Roll Number Verify Field
-        search_roll = st.text_input("Apna Roll Number Type Karein:", placeholder="Eg. 101, 102...").strip()
+        search_roll = st.text_input("Apna Roll Number Type Karein:").strip()
         
         if search_roll:
-            # Database search query logic
-            student_match = next((s for s in st.session_state['student_db'] if s['roll'] == search_roll), None)
+            # Local Database querying execution
+            conn = sqlite3.connect('students_database.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT name, course FROM students WHERE roll = ?', (search_roll,))
+            result = cursor.fetchone()
+            conn.close()
             
-            if student_match:
-                st.success(f"🎯 Record Found! Hello, {student_match['name']}")
-                
-                # Render profile fields info
-                st.info(f"📋 **Verified Course Details:** {student_match['course']}")
-                
-                # Student photo upload handler trigger
-                student_photo = st.file_uploader("Apni Passport Size Photo Upload Karein (JPG/PNG)", type=["jpg", "jpeg", "png"])
+            if result:
+                st.success(f"🎯 Record Found! Hello, {result[0]}")
+                student_photo = st.file_uploader("Apni Passport Size Image Upload Karein:", type=["jpg", "jpeg", "png"])
                 
                 if student_photo is not None:
-                    st.write("### 🪪 Aapka Generated ID Card View:")
-                    
-                    # Call generator using synced Admin variables
-                    final_card_bytes = generate_id_card(
-                        name=student_match['name'],
-                        roll=student_match['roll'],
-                        course=student_match['course'],
+                    card_bytes = generate_id_card(
+                        name=result[0],
+                        roll=search_roll,
+                        course=result[1],
                         photo_file=student_photo,
-                        bg_color=st.session_state['bg_color'],
-                        text_color=st.session_state['text_color'],
-                        header_title=st.session_state['header_title']
+                        bg_color=db_bg,
+                        text_color=db_text,
+                        header_title=db_title
                     )
-                    
-                    # Split grid layout structure for preview and action
-                    col_preview, col_action = st.columns([2, 1])
-                    with col_preview:
-                        st.image(final_card_bytes, width=280)
-                    with col_action:
-                        st.write("")
-                        st.write("")
-                        st.download_button(
-                            label="📥 Download ID Card",
-                            data=final_card_bytes,
-                            file_name=f"ID_{student_match['roll']}_{student_match['name'].replace(' ', '_')}.png",
-                            mime="image/png"
-                        )
-                        st.balloons()
+                    st.image(card_bytes, width=250)
+                    st.download_button("📥 Download ID Card Now", data=card_bytes, file_name=f"ID_{search_roll}.png", mime="image/png")
             else:
-                st.error("🔍 Yeh Roll Number server records me nahi mila. Kripya apna sahi Roll Number dalein.")
+                st.error("🔍 Yeh Roll Number database me nahi mila. Kripya sahi Roll Number enter karein.")
+                
