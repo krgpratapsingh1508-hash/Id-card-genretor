@@ -2,24 +2,23 @@ import streamlit as st
 import csv
 import io
 import sqlite3
+import json
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ LOCAL DATABASE SETUP (SQLITE)
+# 🗄️ LOCAL ADVANCED SQLITE DATABASE ENGINE
 # ==========================================
-# Yeh function database aur table banata hai agar pehle se na bani ho
 def init_db():
-    conn = sqlite3.connect('students_database.db')
+    conn = sqlite3.connect('dynamic_students_db.db')
     cursor = conn.cursor()
-    # Student records table
+    # Dynamic fields ko handle karne ke liye hum data ko JSON string format me save karenge
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
-            roll TEXT PRIMARY KEY,
+            app_no TEXT PRIMARY KEY,
             name TEXT,
-            course TEXT
+            extra_data TEXT
         )
     ''')
-    # Admin layout settings table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
@@ -29,46 +28,49 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Database se settings load karne ke liye helper function
 def get_setting(key, default):
-    conn = sqlite3.connect('students_database.db')
+    conn = sqlite3.connect('dynamic_students_db.db')
     cursor = conn.cursor()
     cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
     row = cursor.fetchone()
     conn.close()
     return row[0] if row else default
 
-# Settings ko save/update karne ke liye function
 def save_setting(key, value):
-    conn = sqlite3.connect('students_database.db')
+    conn = sqlite3.connect('dynamic_students_db.db')
     cursor = conn.cursor()
     cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
     conn.commit()
     conn.close()
 
-# Database initialize karein
 init_db()
 
 # ==========================================
-# 🎨 ID CARD DESIGN SYSTEM
+# 🎨 DYNAMIC ID CARD DESIGN SYSTEM
 # ==========================================
-def generate_id_card(name, roll, course, photo_file, bg_color, text_color, header_title):
-    card = Image.new("RGB", (400, 600), "#FFFFFF")
+def generate_dynamic_card(name, app_no, extra_fields_dict, photo_file, bg_color, text_color, header_title):
+    # Total fields count ke hisab se height dynamic calculate karna
+    total_fields = 2 + len(extra_fields_dict) # Name + AppNo + Extra Fields
+    card_height = 420 + (total_fields * 35) # Height auto-adjust logic
+    
+    card = Image.new("RGB", (400, card_height), "#FFFFFF")
     draw = ImageDraw.Draw(card)
     
-    # Header Layout Area
+    # Header Background Accent
     draw.rectangle([(0, 0), (400, 110)], fill=bg_color)
     
     try:
-        font_header = ImageFont.truetype("arial.ttf", 24)
+        font_header = ImageFont.truetype("arial.ttf", 22)
         font_name = ImageFont.truetype("arial.ttf", 26)
-        font_text = ImageFont.truetype("arial.ttf", 18)
+        font_text = ImageFont.truetype("arial.ttf", 16)
+        font_label = ImageFont.truetype("arial.ttf", 16)
     except IOError:
-        font_header = font_name = font_text = ImageFont.load_default()
+        font_header = font_name = font_text = font_label = ImageFont.load_default()
 
+    # Institute Name
     draw.text((200, 55), header_title.upper(), fill="#FFFFFF", font=font_header, anchor="mm")
     
-    # Photo Frame Process
+    # Passport Photo Frame Loader
     if photo_file is not None:
         try:
             student_img = Image.open(photo_file)
@@ -77,23 +79,36 @@ def generate_id_card(name, roll, course, photo_file, bg_color, text_color, heade
             draw.rectangle([(140, 140), (260, 280)], outline=bg_color, width=3)
         except Exception:
             draw.rectangle([(140, 140), (260, 280)], fill="#E1E4E8", outline=bg_color, width=2)
-            draw.text((200, 210), "IMAGE ERROR", fill="#586069", font=font_text, anchor="mm")
     else:
         draw.rectangle([(140, 140), (260, 280)], fill="#E1E4E8", outline=bg_color, width=2)
         draw.text((200, 210), "[ PHOTO ]", fill="#586069", font=font_text, anchor="mm")
     
-    # Profile Text Fields
-    draw.text((200, 320), str(name).upper(), fill=text_color, font=font_name, anchor="mm")
-    draw.text((60, 380), "Roll No:", fill=bg_color, font=font_text)
-    draw.text((160, 380), f"{roll}", fill=text_color, font=font_text)
-    draw.text((60, 420), "Course:", fill=bg_color, font=font_text)
-    draw.text((160, 420), f"{course}", fill=text_color, font=font_text)
-    draw.text((60, 460), "Validity:", fill=bg_color, font=font_text)
-    draw.text((160, 460), "2026 - 2027", fill=text_color, font=font_text)
+    # Student Full Name Text
+    draw.text((200, 315), str(name).upper(), fill=text_color, font=font_name, anchor="mm")
     
-    # Card Footer Section
-    draw.rectangle([(0, 540), (400, 600)], fill="#222222")
-    draw.text((200, 570), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
+    # --- Dynamic Fields Drawing Layout Loop ---
+    current_y = 360
+    
+    # Fixed Application No Field
+    draw.text((50, current_y), "Application No:", fill=bg_color, font=font_label)
+    draw.text((180, current_y), f"{app_no}", fill=text_color, font=font_text)
+    current_y += 35
+    
+    # Extra Dynamic Admin Defined Fields Loop execution
+    for label, val in extra_fields_dict.items():
+        # Title case format spacing adjust
+        display_label = label.strip().title() + ":"
+        draw.text((50, current_y), display_label, fill=bg_color, font=font_label)
+        draw.text((180, current_y), f"{val}", fill=text_color, font=font_text)
+        current_y += 35
+        
+    # Standard Validation stamp placement
+    draw.text((50, current_y), "Validity:", fill=bg_color, font=font_label)
+    draw.text((180, current_y), "2026 - 2027", fill=text_color, font=font_text)
+    
+    # Bottom Fixed Signatory Stamp Footer
+    draw.rectangle([(0, card_height - 55), (400, card_height)], fill="#222222")
+    draw.text((200, card_height - 28), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
     
     img_byte_arr = io.BytesIO()
     card.save(img_byte_arr, format='PNG')
@@ -101,19 +116,21 @@ def generate_id_card(name, roll, course, photo_file, bg_color, text_color, heade
 
 
 # ==========================================
-# 🌐 MAIN WEB INTERFACE UI
+# 🌐 MAIN ROUTER LAYOUT CONTROLLER
 # ==========================================
-st.set_page_config(page_title="Permanent Local DB ID System", page_icon="🪪")
+st.set_page_config(page_title="Dynamic Setup ID Engine", page_icon="🪪")
 
-# Persistent state configurations loading dynamically from DB
+# Initialize global layout state variables from persistence layers
 db_title = get_setting('header_title', 'UNIVERSAL INSTITUTE')
 db_bg = get_setting('bg_color', '#0052cc')
 db_text = get_setting('text_color', '#333333')
+# Default tags placeholder strings configuration
+db_fields = get_setting('custom_fields', 'Course, Father Name, Mobile No')
 
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ SYSTEM SECTION 1: ADMIN CONTROL PANEL
+# 🛡️ SYSTEM SECTION 1: ADMIN ARCHITECT
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -122,99 +139,156 @@ if app_mode == "🛡️ Admin Panel":
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved!")
         
-        st.subheader("🎨 Custom Design Control")
+        st.subheader("🎨 Custom Design & Field Controller")
         new_title = st.text_input("Institute Name", db_title)
         new_bg = st.color_picker("Theme Color", db_bg)
         new_text = st.color_picker("Text Color", db_text)
         
-        # Agar admin layout settings badalta hai toh DB me update karein
-        if new_title != db_title or new_bg != db_bg or new_text != db_text:
+        st.write("")
+        st.markdown("##### ⚙️ ID Card Par Kya Kya Details Aayengi?")
+        st.caption("Jo fields aapko chahiye unhe comma (,) lagakar likhein. System automatic unka layout aur database bana dega.")
+        new_fields = st.text_input("Custom Layout Fields (Comma Separated):", db_fields)
+        
+        # State syncing trigger conditions checking block
+        if new_title != db_title or new_bg != db_bg or new_text != db_text or new_fields != db_fields:
             save_setting('header_title', new_title)
             save_setting('bg_color', new_bg)
             save_setting('text_color', new_text)
+            save_setting('custom_fields', new_fields)
             st.rerun()
 
         st.markdown("---")
-        st.subheader("📦 Database Management Tracker")
+        st.subheader("📦 Bulk CSV Importer Dashboard")
         
-        uploaded_csv = st.file_uploader("Upload Student Database (CSV File)", type=["csv"])
+        # Parse fields structured breakdown lists
+        active_fields = [f.strip() for f in new_fields.split(",") if f.strip()]
+        
+        st.info(f"💡 **Aapki CSV file me yeh headings hona jaroori hai:**\n`AppNo`, `Name`, {', '.join([f'`{x}`' for x in active_fields])}")
+        
+        uploaded_csv = st.file_uploader("Upload Student Database (CSV)", type=["csv"])
         if uploaded_csv is not None:
             file_contents = uploaded_csv.getvalue().decode("utf-8").splitlines()
             reader = csv.DictReader(file_contents)
             
-            # Database connection open karke data push karna
-            conn = sqlite3.connect('students_database.db')
+            conn = sqlite3.connect('dynamic_students_db.db')
             cursor = conn.cursor()
             
             count = 0
             for row in reader:
-                r_roll = row.get('Roll', row.get('roll', '000')).strip()
+                # Primary headers verification matching sequence
+                r_app = row.get('AppNo', row.get('appno', '')).strip()
                 r_name = row.get('Name', row.get('name', 'Unknown'))
-                r_course = row.get('Course', row.get('course', 'N/A'))
                 
-                # INSERT OR REPLACE taaki duplicate roll no par data overwrite/update ho jaye
-                cursor.execute('INSERT OR REPLACE INTO students (roll, name, course) VALUES (?, ?, ?)', (r_roll, r_name, r_course))
+                if not r_app:
+                    continue
+                    
+                # Dynamic subfields gathering from row inside json map packing
+                student_extra_map = {}
+                for field in active_fields:
+                    student_extra_map[field] = row.get(field, row.get(field.lower(), 'N/A'))
+                
+                json_data_str = json.dumps(student_extra_map)
+                
+                cursor.execute('INSERT OR REPLACE INTO students (app_no, name, extra_data) VALUES (?, ?, ?)', (r_app, r_name, json_data_str))
                 count += 1
                 
             conn.commit()
             conn.close()
-            st.success(f"✅ Database updated successfully! Total {count} records added/updated permanently.")
+            st.success(f"✅ Data Synchronized! {count} records saved with dynamic layouts.")
 
-        # Data Delete karne ka manual control option
-        st.write("")
-        if st.button("🗑️ Clear Entire Database Records"):
-            conn = sqlite3.connect('students_database.db')
-            cursor = conn.cursor()
-            cursor.execute('DELETE FROM students')
-            conn.commit()
-            conn.close()
-            st.warning("🚨 Saara student data permanent database se delete kar diya gaya hai!")
-            
-    elif admin_pass != "":
-        st.error("❌ Galat Password!")
-
-# ------------------------------------------
-# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL
-# ------------------------------------------
-else:
-    st.header("🎓 Student Card Download Counter")
-    
-    # Check karein ki database me data maujood hai ya nahi
-    conn = sqlite3.connect('students_database.db')
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM students')
-    db_count = cursor.fetchone()[0]
-    conn.close()
-    
-    if db_count == 0:
-        st.warning("⚠️ Configuration Missing! Admin ne abhi tak database me koi student record upload nahi kiya hai.")
-    else:
-        search_roll = st.text_input("Apna Roll Number Type Karein:").strip()
+        st.markdown("---")
+        st.subheader("📋 Live Database Viewer")
         
-        if search_roll:
-            # Local Database querying execution
-            conn = sqlite3.connect('students_database.db')
-            cursor = conn.cursor()
-            cursor.execute('SELECT name, course FROM students WHERE roll = ?', (search_roll,))
-            result = cursor.fetchone()
-            conn.close()
+        conn = sqlite3.connect('dynamic_students_db.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT app_no, name, extra_data FROM students')
+        rows = cursor.fetchall()
+        conn.close()
+        
+        if rows:
+            table_data = []
+            for r in rows:
+                row_dict = {"Application No": r[0], "Student Name": r[1]}
+                try:
+                    extra_meta = json.loads(r[2])
+                    row_dict.update(extra_meta)
+                except:
+                    pass
+                table_data.append(row_dict)
+                
+            import pandas as pd
+            st.dataframe(pd.DataFrame(table_data), use_container_width=True)
             
-            if result:
-                st.success(f"🎯 Record Found! Hello, {result[0]}")
-                student_photo = st.file_uploader("Apni Passport Size Image Upload Karein:", type=["jpg", "jpeg", "png"])
+            if st.button("🗑️ Clear All Records"):
+                conn = sqlite3.connect('dynamic_students_db.db')
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM students')
+                conn.commit()
+                conn.close()
+                st.warning("Database cleared!")
+                st.rerun()
+        else:
+            st.write("📂 Database is currently empty.")
+
+# ==========================================
+# 🎓 SYSTEM SECTION 2: STUDENT LIVE PORTAL
+# ==========================================
+st.header("🎓 Student Self-Service Hub")
+
+# 1. Check karein ki database me data maujood hai ya nahi
+conn = sqlite3.connect('dynamic_students_db.db')
+cursor = conn.cursor()
+cursor.execute('SELECT COUNT(*) FROM students')
+db_count = cursor.fetchone()
+conn.close()
+
+if db_count == 0:
+    st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
+else:
+    # 2. Student se Application Number input lena
+    search_app = st.text_input("Apna Application Number Type Karein:").strip()
+    
+    if search_app:
+        # 3. Database se Application Number search karna
+        conn = sqlite3.connect('dynamic_students_db.db')
+        cursor = conn.cursor()
+        cursor.execute('SELECT name, extra_data FROM students WHERE app_no = ?', (search_app,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            s_name, s_json = result
+            # Admin dwara upload kiye gaye dynamic fields ko decode karna
+            extra_fields_loaded = json.loads(s_json)
+            
+            st.success(f"🎯 Record Found! Hello, {s_name}")
+            
+            # Screen par details show karna
+            for lbl, vl in extra_fields_loaded.items():
+                st.write(f"🔹 **{lbl.title()}:** {vl}")
                 
-                if student_photo is not None:
-                    card_bytes = generate_id_card(
-                        name=result[0],
-                        roll=search_roll,
-                        course=result[1],
-                        photo_file=student_photo,
-                        bg_color=db_bg,
-                        text_color=db_text,
-                        header_title=db_title
-                    )
-                    st.image(card_bytes, width=250)
-                    st.download_button("📥 Download ID Card Now", data=card_bytes, file_name=f"ID_{search_roll}.png", mime="image/png")
-            else:
-                st.error("🔍 Yeh Roll Number database me nahi mila. Kripya sahi Roll Number enter karein.")
+            # 4. Photo upload field
+            student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
+            
+            if student_photo is not None:
+                # 5. ID Card image generate karna (Admin settings ke mutabik)
+                card_bytes = generate_dynamic_card(
+                    name=s_name,
+                    app_no=search_app,
+                    extra_fields_dict=extra_fields_loaded,
+                    photo_file=student_photo,
+                    bg_color=db_bg,
+                    text_color=db_text,
+                    header_title=db_title
+                )
                 
+                # Live Preview aur Download Button
+                st.image(card_bytes, width=260)
+                st.download_button(
+                    label="📥 Download My ID Card", 
+                    data=card_bytes, 
+                    file_name=f"ID_{search_app}.png", 
+                    mime="image/png"
+                )
+        else:
+            st.error("🔍 Yeh Application Number records me nahi mila.")
