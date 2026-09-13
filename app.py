@@ -261,12 +261,12 @@ if app_mode == "🛡️ Admin Panel":
             st.success(f"✅ Data Synchronized! Total {count} records saved cleanly.")
             st.rerun()
 
-        # --- SUBSECTION 3: DATA GRID LIST VIEWER ---
+        # --- SUBSECTION 3: DATA GRID LIST VIEWER (FULL LIST EXPANDED) ---
         st.markdown("---")
         st.subheader("📋 Live Database Uploaded List")
         
         conn = get_db_connection()
-        # Direct dynamic parsing query system to eliminate list layout length crashes
+        # Pure database ko read karna automatic mapping layout ke sath
         df_full = pd.read_sql_query("SELECT * FROM students", conn)
         conn.close()
         
@@ -282,18 +282,24 @@ if app_mode == "🛡️ Admin Panel":
                 "pwd_category": "PWD Category", "e_district": "Trainee E-District"
             }
             df_full.rename(columns=friendly_columns, inplace=True)
+            
+            # Row selection row checkbox column insert karna layout ke starting me
             df_full.insert(0, "Select Row to Delete", False)
             
+            # FIXED DISPLAY CONFIGURATION FOR FULL LARGE WIDTH DATASETS
+            # height=600 lagane se table scrollable box me convert ho jata hai aur poora data scroll hota hai
             edited_df = st.data_editor(
                 df_full,
                 hide_index=True,
                 disabled=[c for c in df_full.columns if c != "Select Row to Delete"],
-                use_container_width=True
+                use_container_width=True,  # Container width full space scale par stretch karega
+                height=600  # Poori bulk list vertical scroll frame me transparently load hogi
             )
             
             selected_rows = edited_df[edited_df["Select Row to Delete"] == True]
-            st.write(f"Total Permanent Strength: **{len(df_full)}** Students found in database.")
+            st.write(f"Total Permanent Strength: **{len(df_full)}** Students found in local database.")
             
+            # Action button setup layouts
             col_del1, col_del2 = st.columns(2)
             with col_del1:
                 if st.button("🗑️ Delete Selected Student(s)", key="del_selected"):
@@ -320,9 +326,6 @@ if app_mode == "🛡️ Admin Panel":
                     st.rerun()
         else:
             st.info("📂 Database is currently empty. Upload a clean CSV file above to populate data.")
-
-    elif admin_pass != "":
-        st.error("❌ Galat Password! Access Denied.")
 
 # ------------------------------------------
 # 🎓 MODE 2: STUDENT PORTAL SECTION (ULTRA STABLE)
