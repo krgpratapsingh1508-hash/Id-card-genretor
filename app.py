@@ -7,7 +7,11 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # Page Configuration
-st.set_page_config(page_title="Dynamic Student ID Card System", page_icon="🪪", layout="centered")
+st.set_page_config(
+    page_title="Dynamic Student ID Card System",
+    page_icon="🪪",
+    layout="centered"
+)
 
 # ==========================================
 # 🗄️ DATABASE ENGINE & AUTO SCHEMA MIGRATION
@@ -29,7 +33,9 @@ def init_db():
             value TEXT
         )
     ''')
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='students'")
+    cursor.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='students'"
+    )
     table_exists = cursor.fetchone()
     
     recreate = False
@@ -43,8 +49,14 @@ def init_db():
         recreate = True
 
     if recreate:
-        col_defs = ", ".join([f"{col} TEXT PRIMARY KEY" if col == "app_no" else f"{col} TEXT" for col in EXPECTED_COLUMNS])
-        cursor.execute(f"CREATE TABLE students ({col_defs})")
+        cols_sql = []
+        for col in EXPECTED_COLUMNS:
+            if col == "app_no":
+                cols_sql.append(f"{col} TEXT PRIMARY KEY")
+            else:
+                cols_sql.append(f"{col} TEXT")
+        create_query = f"CREATE TABLE students ({', '.join(cols_sql)})"
+        cursor.execute(create_query)
     
     conn.commit()
     conn.close()
@@ -60,7 +72,10 @@ def get_setting(key, default):
 def save_setting(key, value):
     conn = sqlite3.connect('dynamic_students_db.db')
     cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
+    cursor.execute(
+        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+        (key, str(value))
+    )
     conn.commit()
     conn.close()
 
@@ -135,19 +150,40 @@ def generate_dynamic_card(
             pass
 
     # Header Titles Text
-    draw.text((header_text_x, 52), str(header_title).upper(), fill="#FFFFFF", font=font_header, anchor="mm")
-    draw.text((header_text_x, 92), str(subtitle_text).upper(), fill="#E2E8F0", font=font_sub, anchor="mm")
+    draw.text(
+        (header_text_x, 52),
+        str(header_title).upper(),
+        fill="#FFFFFF",
+        font=font_header,
+        anchor="mm"
+    )
+    draw.text(
+        (header_text_x, 92),
+        str(subtitle_text).upper(),
+        fill="#E2E8F0",
+        font=font_sub,
+        anchor="mm"
+    )
 
     # 2. Circular Profile Photo Frame
     cx, cy, r = 210, 215, 62
-    draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
+    draw.ellipse(
+        [(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)],
+        fill="#FFFFFF",
+        outline=bg_color,
+        width=4
+    )
 
     photo_rendered = False
     if photo_file is not None:
         try:
             student_img = Image.open(photo_file)
             student_img = ImageOps.exif_transpose(student_img)
-            student_img = ImageOps.fit(student_img, (r * 2, r * 2), Image.Resampling.LANCZOS)
+            student_img = ImageOps.fit(
+                student_img,
+                (r * 2, r * 2),
+                Image.Resampling.LANCZOS
+            )
             mask = Image.new("L", (r * 2, r * 2), 0)
             mask_draw = ImageDraw.Draw(mask)
             mask_draw.ellipse([(0, 0), (r * 2, r * 2)], fill=255)
@@ -161,7 +197,8 @@ def generate_dynamic_card(
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
 
     # 3. Student Full Name
-    draw.text((210, 305), str(student_dict.get('name', 'Unknown')).upper(), fill=text_color, font=font_name, anchor="mm")
+    student_name = str(student_dict.get('name', 'Unknown')).upper()
+    draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
     draw.line([(50, 328), (370, 328)], fill="#CBD5E1", width=2)
 
     # 4. Details Fields
@@ -196,7 +233,13 @@ def generate_dynamic_card(
         except Exception:
             pass
 
-    draw.text((210, footer_top + 27), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
+    draw.text(
+        (210, footer_top + 27),
+        "AUTHORIZED SIGNATORY",
+        fill="#FFFFFF",
+        font=font_text,
+        anchor="mm"
+    )
 
     img_byte_arr = io.BytesIO()
     card.save(img_byte_arr, format='PNG')
@@ -221,7 +264,10 @@ db_logo = get_setting('saved_logo_b64', 'None')
 db_logo_size = int(get_setting('logo_size', '55'))
 db_sign = get_setting('saved_sign_b64', 'None')
 
-app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
+app_mode = st.selectbox(
+    "Apna Portal Chunein:",
+    ["🎓 Student Portal", "🛡️ Admin Panel"]
+)
 
 # ------------------------------------------
 # 🛡️ MODE 1: ADMIN CONTROL PANEL
@@ -233,7 +279,7 @@ if app_mode == "🛡️ Admin Panel":
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved! Welcome Admin.")
 
-        # --- TAB 1: DESIGN & BRANDING ---
+        # --- DESIGN & BRANDING ---
         st.markdown("---")
         st.subheader("🎨 Custom Design & Brand Settings")
         
@@ -241,17 +287,26 @@ if app_mode == "🛡️ Admin Panel":
             col1, col2 = st.columns(2)
             with col1:
                 new_title = st.text_input("Institute / School Name:", value=db_title)
-                new_title_size = st.slider("Institute Name Font Size (px):", min_value=14, max_value=34, value=db_title_size)
+                new_title_size = st.slider(
+                    "Institute Name Font Size (px):",
+                    min_value=14, max_value=34, value=db_title_size
+                )
                 new_title_bold = st.checkbox("Institute Name Bold Karein", value=db_title_bold)
                 new_bg = st.color_picker("Header Top Theme Color:", value=db_bg)
 
             with col2:
                 new_sub = st.text_input("Subtitle Text:", value=db_sub)
-                new_sub_size = st.slider("Subtitle Font Size (px):", min_value=10, max_value=24, value=db_sub_size)
+                new_sub_size = st.slider(
+                    "Subtitle Font Size (px):",
+                    min_value=10, max_value=24, value=db_sub_size
+                )
                 new_sub_bold = st.checkbox("Subtitle Bold Karein", value=db_sub_bold)
                 new_text = st.color_picker("Student Name Text Color:", value=db_text)
 
-            new_logo_size = st.slider("Logo Size (px):", min_value=30, max_value=90, value=db_logo_size)
+            new_logo_size = st.slider(
+                "Logo Size (px):",
+                min_value=30, max_value=90, value=db_logo_size
+            )
             
             save_btn = st.form_submit_button("💾 Design Settings Save Karein")
             if save_btn:
@@ -274,7 +329,11 @@ if app_mode == "🛡️ Admin Panel":
         with c_logo_disp:
             if db_logo != "None":
                 try:
-                    st.image(io.BytesIO(base64.b64decode(db_logo)), width=80, caption="Current Saved Logo")
+                    st.image(
+                        io.BytesIO(base64.b64decode(db_logo)),
+                        width=80,
+                        caption="Current Saved Logo"
+                    )
                     if st.button("❌ Logo Remove Karein", key="del_logo_btn"):
                         delete_setting('saved_logo_b64')
                         st.success("Logo hata diya gaya!")
@@ -284,7 +343,11 @@ if app_mode == "🛡️ Admin Panel":
             else:
                 st.info("Koi logo uploaded nahi hai.")
         with c_logo_up:
-            logo_file = st.file_uploader("Naya Logo Upload Karein (PNG/JPG):", type=["png", "jpg", "jpeg"], key="up_logo")
+            logo_file = st.file_uploader(
+                "Naya Logo Upload Karein (PNG/JPG):",
+                type=["png", "jpg", "jpeg"],
+                key="up_logo"
+            )
             if logo_file is not None:
                 logo_b64 = base64.b64encode(logo_file.getvalue()).decode('utf-8')
                 save_setting('saved_logo_b64', logo_b64)
@@ -298,7 +361,11 @@ if app_mode == "🛡️ Admin Panel":
         with c_sign_disp:
             if db_sign != "None":
                 try:
-                    st.image(io.BytesIO(base64.b64decode(db_sign)), width=120, caption="Current Saved Signature")
+                    st.image(
+                        io.BytesIO(base64.b64decode(db_sign)),
+                        width=120,
+                        caption="Current Saved Signature"
+                    )
                     if st.button("❌ Signature Remove Karein", key="del_sign_btn"):
                         delete_setting('saved_sign_b64')
                         st.success("Signature hata diya gaya!")
@@ -308,19 +375,27 @@ if app_mode == "🛡️ Admin Panel":
             else:
                 st.info("Koi signature uploaded nahi hai.")
         with c_sign_up:
-            sign_file = st.file_uploader("Authorized Signature Upload Karein (PNG/JPG transparent behtar hai):", type=["png", "jpg", "jpeg"], key="up_sign")
+            sign_file = st.file_uploader(
+                "Authorized Signature Upload Karein (PNG/JPG):",
+                type=["png", "jpg", "jpeg"],
+                key="up_sign"
+            )
             if sign_file is not None:
                 sign_b64 = base64.b64encode(sign_file.getvalue()).decode('utf-8')
                 save_setting('saved_sign_b64', sign_b64)
                 st.success("✍️ Signature permanently save ho gaya!")
                 st.rerun()
 
-        # --- SUBSECTION 2: BATCH CSV IMPORTER ---
+        # --- BATCH CSV IMPORTER ---
         st.markdown("---")
         st.subheader("📦 Bulk CSV Data Importer")
-        st.caption("💡 Apni 24 columns wali standard sheet upload karein. Sabhi details (Mobile, Father Name, Trade) auto-fetch ho jayengi.")
+        st.caption("💡 Apni 24 columns wali standard sheet upload karein.")
         
-        uploaded_csv = st.file_uploader("Select Database Spreadsheet (.CSV File Only):", type=["csv"], key="csv_file_uploader")
+        uploaded_csv = st.file_uploader(
+            "Select Database Spreadsheet (.CSV File Only):",
+            type=["csv"],
+            key="csv_file_uploader"
+        )
         if uploaded_csv is not None:
             raw_bytes = uploaded_csv.getvalue()
             decoded_text = None
@@ -382,9 +457,9 @@ if app_mode == "🛡️ Admin Panel":
                 st.success(f"✅ Data Synchronized! Total {count} records saved cleanly.")
                 st.rerun()
             else:
-                st.error("CSV file decode nahi ho saki. Kripya standard UTF-8 CSV upload karein.")
+                st.error("CSV file decode nahi ho saki. Kripya standard CSV upload karein.")
 
-        # --- SUBSECTION 3: DATA LIST & RESET ---
+        # --- DATA LIST & RESET ---
         st.markdown("---")
         st.subheader("📋 Live Database Uploaded List")
         
@@ -444,12 +519,83 @@ else:
     conn.close()
     
     if db_count[0] == 0:
-        st.warning("⚠️ Database me abhi tak koi records upload nahi hain. Admin panel se CSV upload karein.")
+        st.warning("⚠️ Database me abhi records upload nahi hain. Admin panel se CSV upload karein.")
     else:
-        search_app = st.text_input("Apna Application Number Type Karein:", placeholder="Eg. APP202601, 54321...").strip()
+        search_app = st.text_input(
+            "Apna Application Number Type Karein:",
+            placeholder="Eg. APP202601, 54321..."
+        ).strip()
         
         if search_app:
             conn = sqlite3.connect('dynamic_students_db.db')
             cursor = conn.cursor()
-            # Case-insensitive match on application number
-            cursor.execute('SELECT * FROM students WHERE UPPER(TRIM(app_no)) = 
+            
+            # Single line query (koi syntax error nahi aayega)
+            search_query = "SELECT * FROM students WHERE UPPER(TRIM(app_no)) = ?"
+            cursor.execute(search_query, (search_app.upper(),))
+            result = cursor.fetchone()
+            conn.close()
+            
+            if result:
+                student_data_map = {
+                    'app_no': result[0],
+                    'name': result[1],
+                    'samagra_id': result[2],
+                    'father_name': result[3],
+                    'mother_name': result[4],
+                    'dob': result[5],
+                    'gender': result[6],
+                    'admission_year': result[7],
+                    'trade_name': result[8],
+                    'trade_type': result[9],
+                    'mobile': result[10],
+                    'email': result[11]
+                }
+                
+                st.success(f"🎯 Record Found! Hello, **{student_data_map['name']}**")
+                
+                st.write("### 📋 Aapki Verified Details:")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.write(f"🔹 **Father Name:** {student_data_map['father_name']}")
+                    st.write(f"🔹 **DOB (Birth Date):** {student_data_map['dob']}")
+                with col_b:
+                    st.write(f"🔹 **Trade/Course:** {student_data_map['trade_name']}")
+                    st.write(f"🔹 **Mobile No:** {student_data_map['mobile']}")
+                    
+                student_photo = st.file_uploader(
+                    "Apni Passport Photo Upload Karein (Optional):",
+                    type=["jpg", "png", "jpeg"],
+                    key="student_photo_input"
+                )
+                
+                # Card hamesha generate hoga (photo ho ya na ho)
+                card_bytes = generate_dynamic_card(
+                    student_dict=student_data_map,
+                    photo_file=student_photo if student_photo is not None else None,
+                    bg_color=db_bg,
+                    text_color=db_text,
+                    header_title=db_title,
+                    title_font_size=db_title_size,
+                    title_bold=db_title_bold,
+                    subtitle_text=db_sub,
+                    subtitle_font_size=db_sub_size,
+                    subtitle_bold=db_sub_bold,
+                    logo_base64=db_logo,
+                    logo_size=db_logo_size,
+                    sign_base64=db_sign
+                )
+                
+                st.write("### 🪪 Aapka Live ID Card Preview:")
+                st.image(card_bytes, width=280)
+                
+                st.download_button(
+                    label="📥 Download My ID Card",
+                    data=card_bytes,
+                    file_name=f"ID_{student_data_map['app_no']}.png",
+                    mime="image/png"
+                )
+                if student_photo is not None:
+                    st.balloons()
+            else:
+                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
