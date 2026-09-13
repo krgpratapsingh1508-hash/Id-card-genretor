@@ -74,18 +74,25 @@ def get_font(size, bold=False):
             return ImageFont.truetype(font_path, size)
         except Exception:
             continue
-    return ImageFont.load_default()
+    try:
+        return ImageFont.load_default(size=size)
+    except Exception:
+        return ImageFont.load_default()
 
 # ==========================================
-# 🎨 ID CARD ENGINE (WITH AUTHORIZED SIGNATURE)
+# 🎨 ID CARD ENGINE (FULL DESIGN CONTROL)
 # ==========================================
-def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None, sign_base64=None):
+def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, 
+                         header_title, title_size, title_bold,
+                         sub_title, sub_size, sub_bold,
+                         logo_base64=None, logo_size=55, sign_base64=None):
+    
     card_width, card_height = 420, 600
     card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
     draw = ImageDraw.Draw(card)
 
-    font_header = get_font(20, bold=True)
-    font_sub = get_font(12, bold=True)
+    font_header = get_font(title_size, bold=title_bold)
+    font_sub = get_font(sub_size, bold=sub_bold)
     font_name = get_font(22, bold=True)
     font_label = get_font(14, bold=True)
     font_text = get_font(14, bold=False)
@@ -94,25 +101,37 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     # 1. Top Header Banner
     draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
 
-    # 2. Logo Placement
+    # 2. Dynamic Logo Placement & Sizing
     header_text_x = 210
     align_anchor = "mm"
+    has_logo = False
+    
     if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
         try:
             logo_data = base64.b64decode(logo_base64)
             logo_img = Image.open(io.BytesIO(logo_data)).convert("RGBA")
-            logo_img = logo_img.resize((58, 58), Image.Resampling.LANCZOS)
-            card.paste(logo_img, (24, 38), mask=logo_img)
-            header_text_x = 235
+            logo_img = logo_img.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+            
+            # Vertically center logo inside 135px header
+            logo_y = max(10, (135 - logo_size) // 2)
+            card.paste(logo_img, (20, logo_y), mask=logo_img)
+            
+            header_text_x = 20 + logo_size + 14
             align_anchor = "lm"
+            has_logo = True
         except Exception:
-            pass
+            header_text_x = 210
+            align_anchor = "mm"
 
-    safe_title = (header_title or "INSTITUTE OF TECHNOLOGY").upper()[:26]
+    # 3. Main Title & Subtitle Render
+    safe_title = (header_title or "").upper()
+    safe_sub = (sub_title or "").upper()
+    
     draw.text((header_text_x, 52), safe_title, fill="#FFFFFF", font=font_header, anchor=align_anchor)
-    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor=align_anchor)
+    if safe_sub:
+        draw.text((header_text_x, 88), safe_sub, fill="#E2E8F0", font=font_sub, anchor=align_anchor)
 
-    # 3. Circular Profile Photo
+    # 4. Circular Profile Photo
     cx, cy, r = 210, 215, 62
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
 
@@ -131,12 +150,12 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
 
-    # 4. Student Full Name
+    # 5. Student Full Name
     student_name = str(student_dict.get('name', 'N/A')).upper()[:24]
     draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
     draw.line([(45, 328), (375, 328)], fill="#CBD5E1", width=2)
 
-    # 5. Student Information Rows
+    # 6. Student Information Rows
     display_fields = [
         ("Roll / App No :", student_dict.get('app_no', 'N/A')),
         ("Father's Name :", student_dict.get('father_name', 'N/A')),
@@ -152,12 +171,11 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.text((185, current_y), val_str, fill="#0F172A", font=font_text)
         current_y += 33
 
-    # 6. Authorized Signatory & Uploaded Signature Section
+    # 7. Authorized Signature & Signatory Underline
     if sign_base64 and str(sign_base64).strip() not in ["None", ""]:
         try:
             sign_data = base64.b64decode(sign_base64)
             sign_img = Image.open(io.BytesIO(sign_data))
-            # Signature scale max 140 width, 45 height
             sign_img.thumbnail((140, 45), Image.Resampling.LANCZOS)
             sw, sh = sign_img.size
             sx = 210 - (sw // 2)
@@ -169,11 +187,10 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         except Exception:
             pass
 
-    # Signatory Underline & Text
     draw.line([(130, 555), (290, 555)], fill="#94A3B8", width=1)
     draw.text((210, 572), "AUTHORIZED SIGNATORY", fill="#334155", font=font_footer, anchor="mm")
 
-    # Bottom Border Strip
+    # Bottom Accent Border
     draw.rectangle([(0, card_height - 6), (card_width, card_height)], fill=bg_color)
 
     out_bytes = io.BytesIO()
@@ -184,9 +201,17 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
 # 🌐 MAIN SETTINGS LOAD
 # ==========================================
 db_title = get_setting('header_title', 'LOVE INSTITUTE')
+db_title_size = int(get_setting('title_font_size', 20))
+db_title_bold = get_setting('title_bold', 'True') == 'True'
+
+db_sub = get_setting('sub_title', 'STUDENT IDENTITY CARD')
+db_sub_size = int(get_setting('sub_font_size', 12))
+db_sub_bold = get_setting('sub_bold', 'True') == 'True'
+
 db_bg = get_setting('bg_color', '#8B00FF')
 db_text = get_setting('text_color', '#1E293B')
 db_logo = get_setting('saved_logo_b64', 'None')
+db_logo_size = int(get_setting('logo_size', 55))
 db_sign = get_setting('saved_sign_b64', 'None')
 
 st.sidebar.title("📌 Menu")
@@ -202,19 +227,50 @@ if app_mode == "🛡️ Admin Panel":
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved! Welcome Admin.")
 
-        st.subheader("🎨 Custom Design & Brand Assets")
+        # --- SUBSECTION 1: ADVANCED DESIGN & TYPOGRAPHY SETTINGS ---
+        st.subheader("🎨 Custom Typography & Header Designer")
         with st.form("branding_form"):
+            st.markdown("#### 🏛️ 1. Main Institute Name Settings")
             new_title = st.text_input("Institute / School Name:", value=db_title)
-            col1, col2 = st.columns(2)
-            with col1:
-                new_bg = st.color_picker("Header Top Theme Color:", value=db_bg)
-            with col2:
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                new_title_size = st.slider("Name Font Size (px):", min_value=14, max_value=34, value=db_title_size)
+            with col_t2:
+                new_title_bold = st.checkbox("Bold Institute Name", value=db_title_bold)
+
+            st.markdown("#### 📝 2. Subtitle / Card Heading Settings")
+            new_sub = st.text_input("Card Sub-Title (e.g. STUDENT IDENTITY CARD):", value=db_sub)
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                new_sub_size = st.slider("Subtitle Font Size (px):", min_value=10, max_value=24, value=db_sub_size)
+            with col_s2:
+                new_sub_bold = st.checkbox("Bold Subtitle", value=db_sub_bold)
+
+            st.markdown("#### 🎨 3. Theme Colors")
+            col_c1, col_c2 = st.columns(2)
+            with col_c1:
+                new_bg = st.color_picker("Header Top Background Color:", value=db_bg)
+            with col_c2:
                 new_text = st.color_picker("Student Name / Text Color:", value=db_text)
-            if st.form_submit_button("💾 Save Branding Settings"):
+
+            st.markdown("#### 📐 4. Logo Dimensions")
+            new_logo_size = st.slider("Logo Size (Width & Height in px):", min_value=30, max_value=90, value=db_logo_size)
+
+            submitted = st.form_submit_button("💾 Save All Designer Settings")
+            if submitted:
                 save_setting('header_title', new_title.strip())
+                save_setting('title_font_size', new_title_size)
+                save_setting('title_bold', str(new_title_bold))
+                
+                save_setting('sub_title', new_sub.strip())
+                save_setting('sub_font_size', new_sub_size)
+                save_setting('sub_bold', str(new_sub_bold))
+                
                 save_setting('bg_color', new_bg)
                 save_setting('text_color', new_text)
-                st.success("Settings saved successfully!")
+                save_setting('logo_size', new_logo_size)
+                
+                st.success("✅ All typography & layout settings saved successfully!")
                 st.rerun()
 
         st.markdown("---")
@@ -225,7 +281,7 @@ if app_mode == "🛡️ Admin Panel":
             st.markdown("##### 🏢 Institute Logo")
             if db_logo and db_logo != "None":
                 try:
-                    st.image(io.BytesIO(base64.b64decode(db_logo)), width=90, caption="Current Logo")
+                    st.image(io.BytesIO(base64.b64decode(db_logo)), width=db_logo_size, caption=f"Current Logo ({db_logo_size}px)")
                 except Exception:
                     pass
             logo_file = st.file_uploader("Upload New Logo (PNG / JPG):", type=["png", "jpg", "jpeg"], key="logo_uploader")
@@ -394,33 +450,4 @@ else:
                     st.markdown(f"**Father's Name:** {student_data['father_name']}")
                     st.markdown(f"**DOB:** {student_data['dob']}")
                 with col_b:
-                    st.markdown(f"**Trade/Course:** {student_data['trade_name']}")
-                    st.markdown(f"**Mobile:** {student_data['mobile']}")
-
-                st.markdown("---")
-                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (Optional):", type=["jpg", "png", "jpeg"])
-
-                card_bytes = generate_dynamic_card(
-                    student_dict=student_data,
-                    photo_file=student_photo,
-                    bg_color=db_bg,
-                    text_color=db_text,
-                    header_title=db_title,
-                    logo_base64=db_logo,
-                    sign_base64=db_sign
-                )
-
-                st.markdown("### 🪪 Live ID Card Preview:")
-                st.image(card_bytes, width=320)
-
-                st.download_button(
-                    label="📥 Download ID Card (PNG)",
-                    data=card_bytes,
-                    file_name=f"ID_{student_data['app_no']}.png",
-                    mime="image/png"
-                )
-                if student_photo is not None:
-                    st.balloons()
-            else:
-                st.error("🔍 Yeh Application Number nahi mila. Sahi Number daalein.")
-                
+                 
