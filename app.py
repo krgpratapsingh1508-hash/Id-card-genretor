@@ -1,34 +1,4 @@
-import streamlit as st
-import csv
-import io
-import sqlite3
-import pandas as pd
-import base64
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-
-# ==========================================
-# 🗄️ MASTER DATABASE ENGINE (CENTRALIZED)
-# ==========================================
-def get_db_connection():
-    return sqlite3.connect('students_database.db')
-
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    # Fixed Schema Structure (Exactly 24 columns defined)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS students (
-            app_no TEXT PRIMARY KEY,
-            name TEXT,
-            samagra_id TEXT,
-            father_name TEXT,
-            mother_name TEXT,
-            dob TEXT,
-            gender TEXT,
-            admission_year TEXT,
-            trade_name TEXT,
-            trade_type TEXT,
-            mobile TEXT,
+,            mobile TEXT,
             email TEXT,
             category TEXT,
             ews TEXT,
