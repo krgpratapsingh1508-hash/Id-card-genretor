@@ -2,422 +2,420 @@ import streamlit as st
 import csv
 import io
 import sqlite3
-import pandas as pd
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-# ==========================================
-# 🗄️ MASTER DATABASE ENGINE (CENTRALIZED & FIXED)
-# ==========================================
-def get_db_connection():
-    return sqlite3.connect('students_database.db')
+# Page Configuration
+st.set_page_config(page_title="Student ID Card Portal", page_icon="🪪", layout="centered")
 
+DB_NAME = "dynamic_students_db.db"
+
+# ==========================================
+# 🗄️ DATABASE ENGINE
+# ==========================================
 def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    # Fixed Schema Structure (Exactly 24 columns defined)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS students (
-            app_no TEXT PRIMARY KEY,
-            name TEXT,
-            samagra_id TEXT,
-            father_name TEXT,
-            mother_name TEXT,
-            dob TEXT,
-            gender TEXT,
-            admission_year TEXT,
-            trade_name TEXT,
-            trade_type TEXT,
-            mobile TEXT,
-            email TEXT,
-            category TEXT,
-            ews TEXT,
-            minority TEXT,
-            passing_year TEXT,
-            board_name TEXT,
-            domicile TEXT,
-            date_of_admission TEXT,
-            trade_duration TEXT,
-            round TEXT,
-            disability TEXT,
-            pwd_category TEXT,
-            e_district TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS settings (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    ''')
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS students (
+                app_no TEXT PRIMARY KEY,
+                name TEXT,
+                samagra_id TEXT,
+                father_name TEXT,
+                mother_name TEXT,
+                dob TEXT,
+                gender TEXT,
+                admission_year TEXT,
+                trade_name TEXT,
+                trade_type TEXT,
+                mobile TEXT,
+                email TEXT,
+                category TEXT,
+                ews TEXT,
+                minority TEXT,
+                passing_year TEXT,
+                board_name TEXT,
+                domicile TEXT,
+                date_of_admission TEXT,
+                trade_duration TEXT,
+                round TEXT,
+                disability TEXT,
+                pwd_category TEXT,
+                e_district TEXT
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        ''')
+        conn.commit()
 
 def get_setting(key, default):
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
-        row = cursor.fetchone()
-        conn.close()
-        if row and row[0]:
-            val = str(row[0]).strip()
-            # Purane kharab brackets aur commas ko filter karna
-            if val.startswith("('") or val.endswith(",)"):
-                val = val.replace("('", "").replace("',)", "").replace(",)", "").replace("'", "").strip()
-            return val
-    except:
-        pass
-    return default
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT value FROM settings WHERE key = ?', (key,))
+            row = cursor.fetchone()
+            return row[0] if row else default
+    except Exception:
+        return default
 
 def save_setting(key, value):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
-    conn.commit()
-    conn.close()
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
+        conn.commit()
 
-# Start application fresh database check
 init_db()
 
 # ==========================================
-# 🎨 PREMIUM CIRCULAR ID CARD ENGINE
+# 🔤 CROSS-PLATFORM FONT HELPER
+# ==========================================
+def get_font(size, bold=False):
+    font_names = [
+        "arialbd.ttf" if bold else "arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "DejaVuSans.ttf"
+    ]
+    for font_path in font_names:
+        try:
+            return ImageFont.truetype(font_path, size)
+        except Exception:
+            continue
+    try:
+        return ImageFont.load_default(size=size)
+    except Exception:
+        return ImageFont.load_default()
+
+# ==========================================
+# 🎨 PREMIUM ID CARD ENGINE
 # ==========================================
 def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None):
-    card_height = 580 
-    card = Image.new("RGB", (420, card_height), "#F8FAFC") 
+    card_width = 420
+    card_height = 590
+    card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
     draw = ImageDraw.Draw(card)
-    
-    draw.rectangle([(0, 0), (420, 140)], fill=bg_color)
-    
-    try:
-        font_header = ImageFont.truetype("arial.ttf", 22)
-        font_sub = ImageFont.truetype("arial.ttf", 13)
-        font_name = ImageFont.truetype("arial.ttf", 26)
-        font_text = ImageFont.truetype("arial.ttf", 16)
-        font_label = ImageFont.truetype("arial.ttf", 15)
-    except IOError:
-        font_header = font_sub = font_name = font_text = font_label = ImageFont.load_default()
 
+    # Fonts
+    font_header = get_font(20, bold=True)
+    font_sub = get_font(12, bold=True)
+    font_name = get_font(22, bold=True)
+    font_label = get_font(14, bold=True)
+    font_text = get_font(14, bold=False)
+    font_footer = get_font(13, bold=True)
+
+    # Top Header Banner
+    draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
+
+    # Logo Placement
     header_text_x = 210
-    if logo_base64 and str(logo_base64) != "None" and str(logo_base64) != "":
+    align_anchor = "mm"
+    if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
         try:
             logo_data = base64.b64decode(logo_base64)
             logo_img = Image.open(io.BytesIO(logo_data)).convert("RGBA")
-            logo_img = logo_img.resize((55, 55), Image.Resampling.LANCZOS)
-            card.paste(logo_img, (30, 42), logo_img)
-            header_text_x = 245
+            logo_img = logo_img.resize((58, 58), Image.Resampling.LANCZOS)
+            card.paste(logo_img, (24, 38), mask=logo_img)
+            header_text_x = 235
+            align_anchor = "lm"
         except Exception:
-            pass
+            header_text_x = 210
+            align_anchor = "mm"
 
-    draw.text((header_text_x, 55), str(header_title).upper(), fill="#FFFFFF", font=font_header, anchor="mm" if header_text_x==210 else "lm")
-    draw.text((header_text_x, 90), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor="mm" if header_text_x==210 else "lm")
-    
-    cx, cy, r = 210, 215, 65
+    # Institute Title & Subheader
+    safe_title = (header_title or "INSTITUTE OF TECHNOLOGY").upper()
+    if len(safe_title) > 26 and align_anchor == "lm":
+        safe_title = safe_title[:24] + "..."
+    draw.text((header_text_x, 52), safe_title, fill="#FFFFFF", font=font_header, anchor=align_anchor)
+    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor=align_anchor)
+
+    # Circular Profile Photo
+    cx, cy, r = 210, 215, 62
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
-    
+
     if photo_file is not None:
         try:
             student_img = Image.open(photo_file)
-            student_img = ImageOps.fit(student_img, (r*2, r*2), Image.Resampling.LANCZOS)
-            mask = Image.new("L", (r*2, r*2), 0)
+            student_img = ImageOps.exif_transpose(student_img).convert("RGBA")
+            student_img = ImageOps.fit(student_img, (r * 2, r * 2), Image.Resampling.LANCZOS)
+            
+            mask = Image.new("L", (r * 2, r * 2), 0)
             mask_draw = ImageDraw.Draw(mask)
-            mask_draw.ellipse([(0, 0), (r*2, r*2)], fill=255)
+            mask_draw.ellipse([(0, 0), (r * 2, r * 2)], fill=255)
             card.paste(student_img, (cx - r, cy - r), mask=mask)
         except Exception:
             draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
+            draw.text((cx, cy), "NO PHOTO", fill="#64748B", font=font_label, anchor="mm")
     else:
         draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
-    
-    draw.text((210, 310), str(student_dict['name']).upper(), fill=text_color, font=font_name, anchor="mm")
-    draw.line([(50, 335), (370, 335)], fill="#CBD5E1", width=2)
-    
+
+    # Student Full Name
+    student_name = str(student_dict.get('name', 'N/A')).upper()
+    if len(student_name) > 24:
+        student_name = student_name[:22] + ".."
+    draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
+    draw.line([(45, 330), (375, 330)], fill="#CBD5E1", width=2)
+
+    # Information Details
     display_fields = [
-        ("Application No :", student_dict['app_no']),
-        ("Father Name :", student_dict['father_name']),
-        ("Date of Birth :", student_dict['dob']),
-        ("Trade Name :", student_dict['trade_name']),
-        ("Mobile No :", student_dict['mobile']),
+        ("Roll / App No :", student_dict.get('app_no', 'N/A')),
+        ("Father's Name :", student_dict.get('father_name', 'N/A')),
+        ("Date of Birth  :", student_dict.get('dob', 'N/A')),
+        ("Trade/Course   :", student_dict.get('trade_name', 'N/A')),
+        ("Mobile No      :", student_dict.get('mobile', 'N/A')),
     ]
-    
-    current_y = 355
+
+    current_y = 350
     for label, val in display_fields:
-        draw.text((50, current_y), label, fill="#64748B", font=font_label)
-        draw.text((185, current_y), f"{val}", fill="#0F172A", font=font_text)
-        current_y += 36
-        
-    draw.rectangle([(0, card_height - 60), (420, card_height)], fill="#1E293B")
-    draw.text((210, card_height - 30), "AUTHORIZED SIGNATORY", fill="#FFFFFF", font=font_text, anchor="mm")
-    
-    img_byte_arr = io.BytesIO()
-    card.save(img_byte_arr, format='PNG')
-    return img_byte_arr.getvalue()
+        val_str = str(val).strip()
+        if len(val_str) > 22:
+            val_str = val_str[:20] + "..."
+        draw.text((45, current_y), label, fill="#64748B", font=font_label)
+        draw.text((185, current_y), val_str, fill="#0F172A", font=font_text)
+        current_y += 35
+
+    # Footer Strip
+    draw.rectangle([(0, card_height - 50), (card_width, card_height)], fill="#0F172A")
+    draw.text((210, card_height - 25), "AUTHORIZED SIGNATORY", fill="#F8FAFC", font=font_footer, anchor="mm")
+
+    out_bytes = io.BytesIO()
+    card.save(out_bytes, format='PNG', quality=95)
+    return out_bytes.getvalue()
 
 # ==========================================
-# 🌐 MAIN ROUTER LAYOUT CONTROLLER
+# 🌐 MAIN NAVIGATION
 # ==========================================
-st.set_page_config(page_title="Dynamic Persistent ID System", page_icon="🪪", layout="wide")
+db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
+db_bg = get_setting('bg_color', '#0052cc')
+db_text = get_setting('text_color', '#1E293B')
+db_logo = get_setting('saved_logo_b64', 'None')
 
-# Persistent data state unpacking protection
-db_title = str(get_setting('header_title', 'UNIVERSAL INSTITUTE'))
-db_bg = str(get_setting('bg_color', '#0052cc'))
-db_text = str(get_setting('text_color', '#1E293B'))
-db_logo = str(get_setting('saved_logo_b64', 'None'))
-
-app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
+st.sidebar.title("📌 Menu")
+app_mode = st.sidebar.radio("Go to:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (COMPLETE EXPLICIT REPAIR)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
     admin_pass = st.text_input("Admin Password Likhein:", type="password")
-    
+
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved! Welcome Admin.")
-        
-        # --- SUBSECTION 1: LAYOUT & LOGO DESIGNER ---
+
+        # --- SUBSECTION 1: DESIGNER & BRANDING ---
         st.subheader("🎨 Custom Design & Brand Assets")
-        new_title = st.text_input("Institute / School Name:", db_title)
-        new_bg = st.color_picker("Header Top Theme Color:", db_bg)
-        new_text = st.color_picker("Student Name Text Color:", db_text)
-        
-        # Permanent Logo Display & File Handler Trigger
-        st.write("")
-        st.markdown("##### 🏢 Permanent Institute Logo Status")
-        if db_logo != "None" and db_logo != "":
+        with st.form("branding_form"):
+            new_title = st.text_input("Institute / School Name:", value=db_title)
+            col1, col2 = st.columns(2)
+            with col1:
+                new_bg = st.color_picker("Header Background Color:", value=db_bg)
+            with col2:
+                new_text = st.color_picker("Student Name Color:", value=db_text)
+
+            submitted = st.form_submit_button("💾 Save Branding Settings")
+            if submitted:
+                save_setting('header_title', new_title.strip())
+                save_setting('bg_color', new_bg)
+                save_setting('text_color', new_text)
+                st.success("Settings saved successfully!")
+                st.rerun()
+
+        # Logo Upload & Management
+        st.markdown("##### 🏢 Institute Logo Status")
+        if db_logo and db_logo != "None":
             try:
-                st.image(io.BytesIO(base64.b64decode(db_logo)), width=80, caption="Saved Current Logo")
+                st.image(io.BytesIO(base64.b64decode(db_logo)), width=90, caption="Current Logo")
             except Exception:
                 pass
-            
-        logo_file = st.file_uploader("Naya Logo Upload/Change Karein (PNG/JPG):", type=["png", "jpg", "jpeg"])
-        if logo_file is not None:
-            logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
-            save_setting('saved_logo_b64', logo_b64_str)
-            st.success("🎉 Logo permanently locked in SQLite!")
-            st.rerun()
 
-        if new_title != db_title or new_bg != db_bg or new_text != db_text:
-            save_setting('header_title', new_title)
-            save_setting('bg_color', new_bg)
-            save_setting('text_color', new_text)
-            st.rerun()
+        logo_file = st.file_uploader("Upload New Logo (PNG / JPG):", type=["png", "jpg", "jpeg"], key="logo_uploader")
+        if logo_file is not None:
+            if st.button("Save Uploaded Logo"):
+                logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
+                save_setting('saved_logo_b64', logo_b64_str)
+                st.success("🎉 Logo permanently saved!")
+                st.rerun()
 
         # --- SUBSECTION 2: BATCH CSV IMPORTER ---
         st.markdown("---")
-        st.subheader("📦 Bulk CSV Data Importer Dashboard")
-        st.caption("💡 Apni 25 columns wali standard sheet upload karein. Sabhi details auto-fetch ho jayengi.")
-        
-        uploaded_csv = st.file_uploader("Select Database Spreadsheet (.CSV)", type=["csv"])
-        if uploaded_csv is not None:
-            file_contents = uploaded_csv.getvalue().decode("utf-8-sig").splitlines()
-            reader = csv.DictReader(file_contents)
-            reader.fieldnames = [f.strip() for f in reader.fieldnames] if reader.fieldnames else []
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            count = 0
-            for row in reader:
-                r_app = row.get('Application Number', row.get('ApplicationNo', '')).strip()
-                r_name = row.get('Name', 'Unknown').strip()
-                
-                if not r_app or r_app == "":
-                    continue
-                
-                cursor.execute('''
-                    INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ''', (
-                    r_app, r_name,
-                    row.get('Samagra ID', 'N/A').strip(),
-                    row.get('Father Name', 'N/A').strip(),
-                    row.get('Mother Name', 'N/A').strip(),
-                    row.get('Dob', 'N/A').strip(),
-                    row.get('Gender', 'N/A').strip(),
-                    row.get('Admission Year', 'N/A').strip(),
-                    row.get('Trade Name', 'N/A').strip(),
-                    row.get('Trade Type NCVT/SCVT', 'N/A').strip(),
-                    row.get('Trainee Mobile', 'N/A').strip(),
-                    row.get('Trainee Email', 'N/A').strip(),
-                    row.get('Category', 'N/A').strip(),
-                    row.get('EWS', 'N/A').strip(),
-                    row.get('Minority Category', 'N/A').strip(),
-                    row.get('Passing Year', 'N/A').strip(),
-                    row.get('Board Name', 'N/A').strip(),
-                    row.get('Domicile', 'N/A').strip(),
-                    row.get('Date of Admission', 'N/A').strip(),
-                    row.get('Trade Duration', 'N/A').strip(),
-                    row.get('Round', 'N/A').strip(),
-                    row.get('Disability', 'N/A').strip(),
-                    row.get('PWD category', 'N/A').strip(),
-                    row.get('Trainee E-District', 'N/A').strip()
-                ))
-                count += 1
-                
-            conn.commit()
-            conn.close()
-            st.success(f"✅ Data Synchronized! Total {count} records saved cleanly.")
-            st.rerun()
+        st.subheader("📦 Bulk CSV Data Importer")
+        uploaded_csv = st.file_uploader("Select Database Spreadsheet (.CSV File)", type=["csv"], key="csv_uploader")
 
-        # --- SUBSECTION 3: DATA GRID LIST VIEWER (FULL LIST EXPANDED) ---
+        if uploaded_csv is not None:
+            try:
+                raw_bytes = uploaded_csv.getvalue()
+                try:
+                    file_contents = raw_bytes.decode("utf-8-sig").splitlines()
+                except UnicodeDecodeError:
+                    file_contents = raw_bytes.decode("latin-1").splitlines()
+
+                reader = csv.DictReader(file_contents)
+                clean_fieldnames = {f.strip().lower(): f.strip() for f in (reader.fieldnames or [])}
+
+                def get_val(row, *aliases):
+                    for alias in aliases:
+                        al = alias.lower()
+                        if al in clean_fieldnames:
+                            val = row.get(clean_fieldnames[al])
+                            if val is not None and str(val).strip() != "":
+                                return str(val).strip()
+                    return 'N/A'
+
+                with sqlite3.connect(DB_NAME) as conn:
+                    cursor = conn.cursor()
+                    count = 0
+                    for row in reader:
+                        r_app = get_val(row, 'Application Number', 'ApplicationNo', 'App No', 'Roll No', 'app_no')
+                        if r_app == 'N/A' or not r_app:
+                            continue
+
+                        r_name = get_val(row, 'Name', 'Student Name', 'Candidate Name')
+
+                        cursor.execute('''
+                            INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                        ''', (
+                            r_app, r_name,
+                            get_val(row, 'Samagra ID', 'SamagraId'),
+                            get_val(row, 'Father Name', 'FatherName', "Father's Name"),
+                            get_val(row, 'Mother Name', 'MotherName', "Mother's Name"),
+                            get_val(row, 'Dob', 'DOB', 'Date of Birth'),
+                            get_val(row, 'Gender'),
+                            get_val(row, 'Admission Year', 'AdmissionYear'),
+                            get_val(row, 'Trade Name', 'Trade', 'Course'),
+                            get_val(row, 'Trade Type NCVT/SCVT', 'Trade Type'),
+                            get_val(row, 'Trainee Mobile', 'Mobile', 'Mobile No', 'Phone'),
+                            get_val(row, 'Trainee Email', 'Email', 'Email ID'),
+                            get_val(row, 'Category'),
+                            get_val(row, 'EWS'),
+                            get_val(row, 'Minority Category', 'Minority'),
+                            get_val(row, 'Passing Year', 'PassingYear'),
+                            get_val(row, 'Board Name', 'Board'),
+                            get_val(row, 'Domicile'),
+                            get_val(row, 'Date of Admission', 'Admission Date'),
+                            get_val(row, 'Trade Duration', 'Duration'),
+                            get_val(row, 'Round'),
+                            get_val(row, 'Disability'),
+                            get_val(row, 'PWD category', 'PWD Category'),
+                            get_val(row, 'Trainee E-District', 'E-District', 'District')
+                        ))
+                        count += 1
+                    conn.commit()
+
+                st.success(f"✅ Data Synchronized! Total {count} student records saved.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error processing CSV file: {e}")
+
+        # --- SUBSECTION 3: DATA VIEWER ---
         st.markdown("---")
-        st.subheader("📋 Live Database Uploaded List")
-        
-        conn = get_db_connection()
-        # Pure database ko read karna automatic mapping layout ke sath
-        df_full = pd.read_sql_query("SELECT * FROM students", conn)
-        conn.close()
-        
-        if not df_full.empty:
-            friendly_columns = {
-                "app_no": "Application Number", "name": "Student Name", "samagra_id": "Samagra ID",
-                "father_name": "Father Name", "mother_name": "Mother Name", "dob": "DOB",
-                "gender": "Gender", "admission_year": "Admission Year", "trade_name": "Trade Name",
-                "trade_type": "Trade Type", "mobile": "Mobile No", "email": "Email",
-                "category": "Category", "ews": "EWS", "minority": "Minority", "passing_year": "Passing Year",
-                "board_name": "Board Name", "domicile": "Domicile", "date_of_admission": "Date of Admission",
-                "trade_duration": "Trade Duration", "round": "Round", "disability": "Disability",
-                "pwd_category": "PWD Category", "e_district": "Trainee E-District"
-            }
-            df_full.rename(columns=friendly_columns, inplace=True)
-            
-            # Row selection row checkbox column insert karna layout ke starting me
-            df_full.insert(0, "Select Row to Delete", False)
-            
-            # FIXED DISPLAY CONFIGURATION FOR FULL LARGE WIDTH DATASETS
-            # height=600 lagane se table scrollable box me convert ho jata hai aur poora data scroll hota hai
-            edited_df = st.data_editor(
-                df_full,
-                hide_index=True,
-                disabled=[c for c in df_full.columns if c != "Select Row to Delete"],
-                use_container_width=True,  # Container width full space scale par stretch karega
-                height=600  # Poori bulk list vertical scroll frame me transparently load hogi
-            )
-            
-            selected_rows = edited_df[edited_df["Select Row to Delete"] == True]
-            st.write(f"Total Permanent Strength: **{len(df_full)}** Students found in local database.")
-            
-            # Action button setup layouts
-            col_del1, col_del2 = st.columns(2)
-            with col_del1:
-                if st.button("🗑️ Delete Selected Student(s)", key="del_selected"):
-                    if not selected_rows.empty:
-                        conn = get_db_connection()
-                        cursor = conn.cursor()
-                        for app_no in selected_rows["Application Number"]:
-                            cursor.execute('DELETE FROM students WHERE app_no = ?', (str(app_no),))
-                        conn.commit()
-                        conn.close()
-                        st.success(f"🚨 Selected ({len(selected_rows)}) records removed successfully!")
-                        st.rerun()
-                    else:
-                        st.warning("⚠️ Kripya delete karne ke liye pehle kisi checkbox par click karein.")
-                        
-            with col_del2:
-                if st.button("🚨 Clear Entire Database Records", key="clear_db_btn"):
-                    conn = get_db_connection()
+        st.subheader("📋 Live Database Student List")
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM students')
+            rows = cursor.fetchall()
+
+        if rows:
+            import pandas as pd
+            columns_list = [
+                "Application Number", "Student Name", "Samagra ID", "Father Name", "Mother Name",
+                "DOB", "Gender", "Admission Year", "Trade Name", "Trade Type", "Mobile No",
+                "Email", "Category", "EWS", "Minority", "Passing Year", "Board Name", "Domicile",
+                "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "E-District"
+            ]
+            df_full = pd.DataFrame(rows, columns=columns_list)
+            st.dataframe(df_full, use_container_width=True)
+            st.write(f"Total Students: **{len(rows)}**")
+
+            if st.button("🗑️ Clear All Student Records"):
+                with sqlite3.connect(DB_NAME) as conn:
                     cursor = conn.cursor()
                     cursor.execute('DELETE FROM students')
                     conn.commit()
-                    conn.close()
-                    st.warning("🚨 Complete student database deleted!")
-                    st.rerun()
+                st.warning("All records deleted.")
+                st.rerun()
         else:
-            st.info("📂 Database is currently empty. Upload a clean CSV file above to populate data.")
+            st.info("📂 Database is currently empty.")
+
+    elif admin_pass != "":
+        st.error("❌ Galat Password! Access Denied.")
 
 # ------------------------------------------
-# 🎓 MODE 2: STUDENT PORTAL SECTION (ULTRA STABLE)
+# 🎓 MODE 2: STUDENT PORTAL
 # ------------------------------------------
 else:
     st.header("🎓 Student Self-Service Hub")
-    
-    # 1. Check karein ki database me data maujood hai ya nahi
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('SELECT COUNT(*) FROM students')
-    db_count = cursor.fetchone()
-    conn.close()
-    
-    # Safe index parsing layer to handle tuple outputs
-    actual_count = db_count[0] if db_count and isinstance(db_count, tuple) else (db_count if db_count else 0)
-    
-    if actual_count == 0:
-        st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
+
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM students')
+        db_count = cursor.fetchone()[0]
+
+    if db_count == 0:
+        st.warning("⚠️ Database me abhi koi student records nahi hain. Admin panel se pehle CSV upload karein.")
     else:
-        # 2. Student se Application Number input lena
-        search_app = st.text_input("Apna Application Number Type Karein:", placeholder="Eg. APP202601...").strip()
-        
+        search_app = st.text_input("Apna Application Number Type Karein:", placeholder="Eg. APP202601, 1024...").strip()
+
         if search_app:
-            # 3. Database se Student ki details extract karna
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM students WHERE app_no = ?', (search_app,))
-            result = cursor.fetchone()
-            conn.close()
-            
+            with sqlite3.connect(DB_NAME) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT * FROM students WHERE UPPER(TRIM(app_no)) = UPPER(TRIM(?))', (search_app,))
+                result = cursor.fetchone()
+
             if result:
-                # 4. Database ke saare columns ko fixed array index se safe variables me unpack karna
-                student_data_map = {
-                    'app_no': str(result[0]).strip() if result[0] is not None else "N/A",
-                    'name': str(result[1]).strip() if result[1] is not None else "Unknown",
-                    'samagra_id': str(result[2]).strip() if result[2] is not None else "N/A",
-                    'father_name': str(result[3]).strip() if result[3] is not None else "N/A",
-                    'mother_name': str(result[4]).strip() if result[4] is not None else "N/A",
-                    'dob': str(result[5]).strip() if result[5] is not None else "N/A",
-                    'gender': str(result[6]).strip() if result[6] is not None else "N/A",
-                    'admission_year': str(result[7]).strip() if result[7] is not None else "N/A",
-                    'trade_name': str(result[8]).strip() if result[8] is not None else "N/A",
-                    'trade_type': str(result[9]).strip() if result[9] is not None else "N/A",
-                    'mobile': str(result[10]).strip() if result[10] is not None else "N/A",
-                    'email': str(result[11]).strip() if result[11] is not None else "N/A"
+                student_data = {
+                    'app_no': result[0],
+                    'name': result[1],
+                    'samagra_id': result[2],
+                    'father_name': result[3],
+                    'mother_name': result[4],
+                    'dob': result[5],
+                    'gender': result[6],
+                    'admission_year': result[7],
+                    'trade_name': result[8],
+                    'trade_type': result[9],
+                    'mobile': result[10],
+                    'email': result[11]
                 }
-                
-                st.success(f"🎯 Record Found! Hello, {student_data_map['name']}")
-                
-                # Screen par verified profile fields visualization layout show karna
-                st.write("### 📋 Aapki Verified Details:")
+
+                st.success(f"🎯 Record Mil Gaya! Hello, **{student_data['name']}**")
+
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    st.write(f"🔹 **Father Name:** {student_data_map['father_name']}")
-                    st.write(f"🔹 **DOB (Birth Date):** {student_data_map['dob']}")
+                    st.markdown(f"**Father's Name:** {student_data['father_name']}")
+                    st.markdown(f"**DOB:** {student_data['dob']}")
                 with col_b:
-                    st.write(f"🔹 **Trade/Course:** {student_data_map['trade_name']}")
-                    st.write(f"🔹 **Mobile No:** {student_data_map['mobile']}")
-                    
-                # 5. Student ki Photo upload karne ka slot trigger
-                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
-                
-                if student_photo is not None:
-                    # Clear tuple string parsing formatting safeguards
-                    actual_bg = db_bg.strip() if isinstance(db_bg, str) else '#0052cc'
-                    actual_text = db_text.strip() if isinstance(db_text, str) else '#1E293B'
-                    actual_title = db_title.strip() if isinstance(db_title, str) else 'UNIVERSAL INSTITUTE'
-                    actual_logo = db_logo.strip() if isinstance(db_logo, str) else 'None'
+                    st.markdown(f"**Trade/Course:** {student_data['trade_name']}")
+                    st.markdown(f"**Mobile:** {student_data['mobile']}")
 
-                    # ID card image bytes generate karna using Pillow canvas engine pipeline
-                    card_bytes = generate_dynamic_card(
-                        student_dict=student_data_map,
-                        photo_file=student_photo,
-                        bg_color=actual_bg,
-                        text_color=actual_text,
-                        header_title=actual_title,
-                        logo_base64=actual_logo
-                    )
-                    
-                    st.write("### 🪪 Live ID Card Preview:")
-                    # Screen par dynamic formatted graphic rendering preview output mask show karna
-                    st.image(card_bytes, width=270)
-                    
-                    # Instant Action Download Button
-                    st.download_button(
-                        label="📥 Download My ID Card", 
-                        data=card_bytes, 
-                        file_name=f"ID_{search_app}.png", 
-                        mime="image/png"
-                    )
-                    st.balloons() # Visual celebration graphic animation trigger
+                st.markdown("---")
+                student_photo = st.file_uploader("Apni Passport Size Photo Upload Karein (JPG / PNG):", type=["jpg", "png", "jpeg"])
+
+                card_bytes = generate_dynamic_card(
+                    student_dict=student_data,
+                    photo_file=student_photo,
+                    bg_color=db_bg,
+                    text_color=db_text,
+                    header_title=db_title,
+                    logo_base64=db_logo
+                )
+
+                st.markdown("### 🪪 Live ID Card Preview:")
+                st.image(card_bytes, width=320)
+
+                st.download_button(
+                    label="📥 Download ID Card (PNG)",
+                    data=card_bytes,
+                    file_name=f"ID_{student_data['app_no']}.png",
+                    mime="image/png"
+                )
+                if student_photo is not None:
+                    st.balloons()
             else:
-                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
+                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number check karke daalein.")
                 
