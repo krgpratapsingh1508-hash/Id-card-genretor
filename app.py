@@ -6,7 +6,6 @@ import base64
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-# Page Configuration
 st.set_page_config(
     page_title="Dynamic Student ID Card System",
     page_icon="🪪",
@@ -14,7 +13,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# 🗄️ DATABASE ENGINE & AUTO SCHEMA MIGRATION
+# 🗄️ DATABASE ENGINE & TABLES
 # ==========================================
 EXPECTED_COLUMNS = [
     "app_no", "name", "samagra_id", "father_name", "mother_name",
@@ -33,9 +32,13 @@ def init_db():
             value TEXT
         )
     ''')
-    cursor.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='students'"
-    )
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS student_photos (
+            app_no TEXT PRIMARY KEY,
+            photo_b64 TEXT
+        )
+    ''')
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='students'")
     table_exists = cursor.fetchone()
     
     recreate = False
@@ -86,6 +89,37 @@ def delete_setting(key):
     conn.commit()
     conn.close()
 
+def get_locked_photo(app_no):
+    conn = sqlite3.connect('dynamic_students_db.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'SELECT photo_b64 FROM student_photos WHERE UPPER(TRIM(app_no)) = ?',
+        (app_no.strip().upper(),)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+def save_locked_photo(app_no, photo_b64):
+    conn = sqlite3.connect('dynamic_students_db.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'INSERT OR REPLACE INTO student_photos (app_no, photo_b64) VALUES (?, ?)',
+        (app_no.strip().upper(), photo_b64)
+    )
+    conn.commit()
+    conn.close()
+
+def delete_locked_photo(app_no):
+    conn = sqlite3.connect('dynamic_students_db.db')
+    cursor = conn.cursor()
+    cursor.execute(
+        'DELETE FROM student_photos WHERE UPPER(TRIM(app_no)) = ?',
+        (app_no.strip().upper(),)
+    )
+    conn.commit()
+    conn.close()
+
 init_db()
 
 # ==========================================
@@ -110,14 +144,19 @@ def get_font(size, bold=False):
 def generate_dynamic_card(
     student_dict,
     photo_file=None,
+    photo_bytes=None,
     bg_color="#0052cc",
-    text_color="#1E293B",
     header_title="GLOBAL TECHNOLOGIES",
     title_font_size=20,
     title_bold=True,
+    title_color="#FFFFFF",
     subtitle_text="STUDENT IDENTITY CARD",
     subtitle_font_size=12,
     subtitle_bold=False,
+    sub_color="#E2E8F0",
+    name_color="#1E293B",
+    label_color="#64748B",
+    val_color="#0F172A",
     logo_base64=None,
     logo_size=55,
     sign_base64=None
@@ -153,14 +192,14 @@ def generate_dynamic_card(
     draw.text(
         (header_text_x, 52),
         str(header_title).upper(),
-        fill="#FFFFFF",
+        fill=title_color,
         font=font_header,
         anchor="mm"
     )
     draw.text(
         (header_text_x, 92),
         str(subtitle_text).upper(),
-        fill="#E2E8F0",
+        fill=sub_color,
         font=font_sub,
         anchor="mm"
     )
@@ -175,10 +214,21 @@ def generate_dynamic_card(
     )
 
     photo_rendered = False
-    if photo_file is not None:
+    img_source = None
+    if photo_bytes is not None:
         try:
-            student_img = Image.open(photo_file)
-            student_img = ImageOps.exif_transpose(student_img)
+            img_source = Image.open(io.BytesIO(photo_bytes))
+        except Exception:
+            img_source = None
+    elif photo_file is not None:
+        try:
+            img_source = Image.open(photo_file)
+        except Exception:
+            img_source = None
+
+    if img_source is not None:
+        try:
+            student_img = ImageOps.exif_transpose(img_source)
             student_img = ImageOps.fit(
                 student_img,
                 (r * 2, r * 2),
@@ -198,7 +248,7 @@ def generate_dynamic_card(
 
     # 3. Student Full Name
     student_name = str(student_dict.get('name', 'Unknown')).upper()
-    draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
+    draw.text((210, 305), student_name, fill=name_color, font=font_name, anchor="mm")
     draw.line([(50, 328), (370, 328)], fill="#CBD5E1", width=2)
 
     # 4. Details Fields
@@ -212,8 +262,8 @@ def generate_dynamic_card(
 
     current_y = 345
     for label, val in display_fields:
-        draw.text((50, current_y), label, fill="#64748B", font=font_label)
-        draw.text((185, current_y), str(val), fill="#0F172A", font=font_text)
+        draw.text((50, current_y), label, fill=label_color, font=font_label)
+        draw.text((185, current_y), str(val), fill=val_color, font=font_text)
         current_y += 32
 
     # 5. Signatory Strip Footer Bar
@@ -221,7 +271,7 @@ def generate_dynamic_card(
     footer_top = card_height - footer_height
     draw.rectangle([(0, footer_top), (card_width, card_height)], fill="#1E293B")
 
-    # Authorized Signature (Paste if available)
+    # Authorized Signature
     if sign_base64 and sign_base64 != "None":
         try:
             sign_data = base64.b64decode(sign_base64)
@@ -252,13 +302,17 @@ def generate_dynamic_card(
 db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
 db_title_size = int(get_setting('title_font_size', '20'))
 db_title_bold = get_setting('title_bold', 'True') == 'True'
+db_title_color = get_setting('title_color', '#FFFFFF')
 
 db_sub = get_setting('subtitle_text', 'STUDENT IDENTITY CARD')
 db_sub_size = int(get_setting('subtitle_font_size', '12'))
 db_sub_bold = get_setting('subtitle_bold', 'False') == 'True'
+db_sub_color = get_setting('sub_color', '#E2E8F0')
 
 db_bg = get_setting('bg_color', '#0052cc')
-db_text = get_setting('text_color', '#1E293B')
+db_name_color = get_setting('name_color', '#1E293B')
+db_label_color = get_setting('label_color', '#64748B')
+db_val_color = get_setting('val_color', '#0F172A')
 
 db_logo = get_setting('saved_logo_b64', 'None')
 db_logo_size = int(get_setting('logo_size', '55'))
@@ -279,48 +333,110 @@ if app_mode == "🛡️ Admin Panel":
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved! Welcome Admin.")
 
-        # --- DESIGN & BRANDING ---
+        # --- DESIGN & FONT COLOR CONTROLS ---
         st.markdown("---")
-        st.subheader("🎨 Custom Design & Brand Settings")
+        st.subheader("🎨 Custom Design & Font Colors Settings")
         
         with st.form("design_form"):
             col1, col2 = st.columns(2)
             with col1:
+                st.markdown("##### 🏛️ Header & Title")
                 new_title = st.text_input("Institute / School Name:", value=db_title)
-                new_title_size = st.slider(
-                    "Institute Name Font Size (px):",
-                    min_value=14, max_value=34, value=db_title_size
-                )
-                new_title_bold = st.checkbox("Institute Name Bold Karein", value=db_title_bold)
+                new_title_size = st.slider("Title Font Size (px):", min_value=14, max_value=34, value=db_title_size)
+                new_title_bold = st.checkbox("Title Bold Karein", value=db_title_bold)
+                new_title_color = st.color_picker("Title Font Color:", value=db_title_color)
                 new_bg = st.color_picker("Header Top Theme Color:", value=db_bg)
 
             with col2:
+                st.markdown("##### 🪪 Subtitle & Student Fonts")
                 new_sub = st.text_input("Subtitle Text:", value=db_sub)
-                new_sub_size = st.slider(
-                    "Subtitle Font Size (px):",
-                    min_value=10, max_value=24, value=db_sub_size
-                )
+                new_sub_size = st.slider("Subtitle Font Size (px):", min_value=10, max_value=24, value=db_sub_size)
                 new_sub_bold = st.checkbox("Subtitle Bold Karein", value=db_sub_bold)
-                new_text = st.color_picker("Student Name Text Color:", value=db_text)
+                new_sub_color = st.color_picker("Subtitle Font Color:", value=db_sub_color)
+                new_name_color = st.color_picker("Student Name Font Color:", value=db_name_color)
 
-            new_logo_size = st.slider(
-                "Logo Size (px):",
-                min_value=30, max_value=90, value=db_logo_size
-            )
+            st.markdown("##### 📝 Card Details Font Colors")
+            cd1, cd2, cd3 = st.columns(3)
+            with cd1:
+                new_label_color = st.color_picker("Field Label Font Color:", value=db_label_color)
+            with cd2:
+                new_val_color = st.color_picker("Field Value Font Color:", value=db_val_color)
+            with cd3:
+                new_logo_size = st.slider("Logo Size (px):", min_value=30, max_value=90, value=db_logo_size)
             
-            save_btn = st.form_submit_button("💾 Design Settings Save Karein")
+            save_btn = st.form_submit_button("💾 Design & Font Color Settings Save Karein")
             if save_btn:
                 save_setting('header_title', new_title)
                 save_setting('title_font_size', str(new_title_size))
                 save_setting('title_bold', str(new_title_bold))
+                save_setting('title_color', new_title_color)
                 save_setting('subtitle_text', new_sub)
                 save_setting('subtitle_font_size', str(new_sub_size))
                 save_setting('subtitle_bold', str(new_sub_bold))
+                save_setting('sub_color', new_sub_color)
                 save_setting('bg_color', new_bg)
-                save_setting('text_color', new_text)
+                save_setting('name_color', new_name_color)
+                save_setting('label_color', new_label_color)
+                save_setting('val_color', new_val_color)
                 save_setting('logo_size', str(new_logo_size))
-                st.success("✅ Design Settings permanently save ho gayi!")
+                st.success("✅ Design & Font Color settings permanently save ho gayi!")
                 st.rerun()
+
+        # --- STUDENT PHOTO PERMANENT LOCK SYSTEM ---
+        st.markdown("---")
+        st.subheader("🔒 Student Photo Permanent Lock System")
+        st.caption("💡 Yahan se aap student ki photo pehle se upload karke lock kar sakte hain. Lock hone ke baad student chahe kitni bhi nayi photo lagaye, ID card par hamesha aapki locked photo hi lagegi.")
+
+        search_lock_app = st.text_input(
+            "Jis Student ki photo lock karni hai uska Application No likhein:",
+            key="lock_search_input"
+        ).strip()
+        if search_lock_app:
+            conn = sqlite3.connect('dynamic_students_db.db')
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name, father_name, trade_name FROM students WHERE UPPER(TRIM(app_no)) = ?",
+                (search_lock_app.upper(),)
+            )
+            s_match = cursor.fetchone()
+            conn.close()
+
+            if s_match:
+                st.info(f"Student: **{s_match[0]}** | Father: **{s_match[1]}** | Trade: **{s_match[2]}**")
+                
+                existing_locked = get_locked_photo(search_lock_app)
+                c_lk_show, c_lk_up = st.columns([1, 2])
+                with c_lk_show:
+                    if existing_locked:
+                        try:
+                            st.image(
+                                io.BytesIO(base64.b64decode(existing_locked)),
+                                width=110,
+                                caption="🔒 Currently Locked Photo"
+                            )
+                            if st.button("🔓 Photo Unlock / Remove Karein", key="unlock_photo_btn"):
+                                delete_locked_photo(search_lock_app)
+                                st.success("Student ki photo unlock ho gayi!")
+                                st.rerun()
+                        except Exception:
+                            st.warning("Photo load error.")
+                    else:
+                        st.info("Iss student ki koi photo lock nahi hai.")
+                
+                with c_lk_up:
+                    admin_student_photo = st.file_uploader(
+                        "Iss student ke liye Photo Upload karein:",
+                        type=["png", "jpg", "jpeg"],
+                        key="admin_student_photo_input"
+                    )
+                    if admin_student_photo is not None:
+                        if st.button("🔒 Save & Lock This Photo", key="save_lock_photo_btn"):
+                            p_b64 = base64.b64encode(admin_student_photo.getvalue()).decode('utf-8')
+                            save_locked_photo(search_lock_app, p_b64)
+                            st.success(f"🎉 Student {search_lock_app} ki photo permanently lock ho gayi!")
+                            st.rerun()
+            else:
+                st.warning("Yeh Application Number database me nahi mila.")
 
         # Logo Upload / Remove Section
         st.markdown("---")
@@ -486,9 +602,10 @@ if app_mode == "🛡️ Admin Panel":
                     conn = sqlite3.connect('dynamic_students_db.db')
                     cursor = conn.cursor()
                     cursor.execute('DELETE FROM students')
+                    cursor.execute('DELETE FROM student_photos')
                     conn.commit()
                     conn.close()
-                    st.warning("🚨 Complete student dataset deleted!")
+                    st.warning("🚨 Complete student dataset and photos deleted!")
                     st.rerun()
             with c_btn2:
                 if st.button("🔄 Reset & Re-create Table Schema", key="reset_schema_btn"):
@@ -530,7 +647,6 @@ else:
             conn = sqlite3.connect('dynamic_students_db.db')
             cursor = conn.cursor()
             
-            # Single line query (koi syntax error nahi aayega)
             search_query = "SELECT * FROM students WHERE UPPER(TRIM(app_no)) = ?"
             cursor.execute(search_query, (search_app.upper(),))
             result = cursor.fetchone()
@@ -562,25 +678,42 @@ else:
                 with col_b:
                     st.write(f"🔹 **Trade/Course:** {student_data_map['trade_name']}")
                     st.write(f"🔹 **Mobile No:** {student_data_map['mobile']}")
-                    
-                student_photo = st.file_uploader(
-                    "Apni Passport Photo Upload Karein (Optional):",
-                    type=["jpg", "png", "jpeg"],
-                    key="student_photo_input"
-                )
                 
-                # Card hamesha generate hoga (photo ho ya na ho)
+                # Admin ki locked photo check karo
+                locked_b64 = get_locked_photo(student_data_map['app_no'])
+                card_photo_bytes = None
+                student_photo_file = None
+                
+                if locked_b64:
+                    st.info("🔒 **Notice:** Aapki photo Admin dwara verify karke lock kar di gayi hai.")
+                    try:
+                        card_photo_bytes = base64.b64decode(locked_b64)
+                    except Exception:
+                        card_photo_bytes = None
+                else:
+                    student_photo_file = st.file_uploader(
+                        "Apni Passport Photo Upload Karein (Optional):",
+                        type=["jpg", "png", "jpeg"],
+                        key="student_photo_input"
+                    )
+                
+                # Card generation (Admin locked photo / Student photo / Default placeholder)
                 card_bytes = generate_dynamic_card(
                     student_dict=student_data_map,
-                    photo_file=student_photo if student_photo is not None else None,
+                    photo_file=student_photo_file,
+                    photo_bytes=card_photo_bytes,
                     bg_color=db_bg,
-                    text_color=db_text,
                     header_title=db_title,
                     title_font_size=db_title_size,
                     title_bold=db_title_bold,
+                    title_color=db_title_color,
                     subtitle_text=db_sub,
                     subtitle_font_size=db_sub_size,
                     subtitle_bold=db_sub_bold,
+                    sub_color=db_sub_color,
+                    name_color=db_name_color,
+                    label_color=db_label_color,
+                    val_color=db_val_color,
                     logo_base64=db_logo,
                     logo_size=db_logo_size,
                     sign_base64=db_sign
@@ -595,7 +728,7 @@ else:
                     file_name=f"ID_{student_data_map['app_no']}.png",
                     mime="image/png"
                 )
-                if student_photo is not None:
+                if student_photo_file is not None or locked_b64 is not None:
                     st.balloons()
             else:
                 st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
