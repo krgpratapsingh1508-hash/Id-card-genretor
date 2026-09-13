@@ -74,10 +74,7 @@ def get_font(size, bold=False):
             return ImageFont.truetype(font_path, size)
         except Exception:
             continue
-    try:
-        return ImageFont.load_default(size=size)
-    except Exception:
-        return ImageFont.load_default()
+    return ImageFont.load_default()
 
 # ==========================================
 # 🎨 ID CARD ENGINE (FULL DESIGN CONTROL)
@@ -104,7 +101,6 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color,
     # 2. Dynamic Logo Placement & Sizing
     header_text_x = 210
     align_anchor = "mm"
-    has_logo = False
     
     if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
         try:
@@ -112,13 +108,11 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color,
             logo_img = Image.open(io.BytesIO(logo_data)).convert("RGBA")
             logo_img = logo_img.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
             
-            # Vertically center logo inside 135px header
             logo_y = max(10, (135 - logo_size) // 2)
             card.paste(logo_img, (20, logo_y), mask=logo_img)
             
             header_text_x = 20 + logo_size + 14
             align_anchor = "lm"
-            has_logo = True
         except Exception:
             header_text_x = 210
             align_anchor = "mm"
@@ -227,7 +221,6 @@ if app_mode == "🛡️ Admin Panel":
     if admin_pass == "daminimylove":
         st.success("🔓 Access Approved! Welcome Admin.")
 
-        # --- SUBSECTION 1: ADVANCED DESIGN & TYPOGRAPHY SETTINGS ---
         st.subheader("🎨 Custom Typography & Header Designer")
         with st.form("branding_form"):
             st.markdown("#### 🏛️ 1. Main Institute Name Settings")
@@ -261,15 +254,12 @@ if app_mode == "🛡️ Admin Panel":
                 save_setting('header_title', new_title.strip())
                 save_setting('title_font_size', new_title_size)
                 save_setting('title_bold', str(new_title_bold))
-                
                 save_setting('sub_title', new_sub.strip())
                 save_setting('sub_font_size', new_sub_size)
                 save_setting('sub_bold', str(new_sub_bold))
-                
                 save_setting('bg_color', new_bg)
                 save_setting('text_color', new_text)
                 save_setting('logo_size', new_logo_size)
-                
                 st.success("✅ All typography & layout settings saved successfully!")
                 st.rerun()
 
@@ -450,4 +440,8 @@ else:
                     st.markdown(f"**Father's Name:** {student_data['father_name']}")
                     st.markdown(f"**DOB:** {student_data['dob']}")
                 with col_b:
-                 
+                    st.markdown(f"**Trade/Course:** {student_data['trade_name']}")
+                    st.markdown(f"**Mobile:** {student_data['mobile']}")
+
+                st.markdown("---")
+                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (Optional):", type=["jpg", "png", "jpeg"])
