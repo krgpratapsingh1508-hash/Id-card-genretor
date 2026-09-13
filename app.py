@@ -4,6 +4,7 @@ import io
 import sqlite3
 import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+import pandas as pd
 
 # Page Configuration
 st.set_page_config(page_title="Student ID Card Portal", page_icon="🪪", layout="centered")
@@ -11,11 +12,20 @@ st.set_page_config(page_title="Student ID Card Portal", page_icon="🪪", layout
 DB_NAME = "dynamic_students_db.db"
 
 # ==========================================
-# 🗄️ DATABASE ENGINE
+# 🗄️ DATABASE ENGINE (AUTO-MIGRATION FIXED)
 # ==========================================
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
+        
+        # Check current table schema
+        cursor.execute("PRAGMA table_info(students)")
+        existing_cols = cursor.fetchall()
+        
+        # Agar table purana hai (jaise 3 columns wala), use drop karke naya 24-column banayein
+        if existing_cols and len(existing_cols) != 24:
+            cursor.execute("DROP TABLE students")
+        
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS students (
                 app_no TEXT PRIMARY KEY,
@@ -52,6 +62,13 @@ def init_db():
         ''')
         conn.commit()
 
+def reset_database():
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DROP TABLE IF EXISTS students")
+        conn.commit()
+    init_db()
+
 def get_setting(key, default):
     try:
         with sqlite3.connect(DB_NAME) as conn:
@@ -68,6 +85,7 @@ def save_setting(key, value):
         cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
         conn.commit()
 
+# Ensure correct table schema on startup
 init_db()
 
 # ==========================================
@@ -100,7 +118,6 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
     draw = ImageDraw.Draw(card)
 
-    # Fonts
     font_header = get_font(20, bold=True)
     font_sub = get_font(12, bold=True)
     font_name = get_font(22, bold=True)
@@ -111,7 +128,6 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     # Top Header Banner
     draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
 
-    # Logo Placement
     header_text_x = 210
     align_anchor = "mm"
     if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
@@ -126,14 +142,13 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
             header_text_x = 210
             align_anchor = "mm"
 
-    # Institute Title & Subheader
     safe_title = (header_title or "INSTITUTE OF TECHNOLOGY").upper()
     if len(safe_title) > 26 and align_anchor == "lm":
         safe_title = safe_title[:24] + "..."
     draw.text((header_text_x, 52), safe_title, fill="#FFFFFF", font=font_header, anchor=align_anchor)
     draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor=align_anchor)
 
-    # Circular Profile Photo
+    # Profile Photo
     cx, cy, r = 210, 215, 62
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
 
@@ -161,7 +176,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
     draw.line([(45, 330), (375, 330)], fill="#CBD5E1", width=2)
 
-    # Information Details
+    # Details
     display_fields = [
         ("Roll / App No :", student_dict.get('app_no', 'N/A')),
         ("Father's Name :", student_dict.get('father_name', 'N/A')),
@@ -190,8 +205,8 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
 # ==========================================
 # 🌐 MAIN NAVIGATION
 # ==========================================
-db_title = get_setting('header_title', 'GLOBAL TECHNOLOGIES')
-db_bg = get_setting('bg_color', '#0052cc')
+db_title = get_setting('header_title', 'LOVE INSTITUTE')
+db_bg = get_setting('bg_color', '#8B00FF')
 db_text = get_setting('text_color', '#1E293B')
 db_logo = get_setting('saved_logo_b64', 'None')
 
@@ -275,20 +290,26 @@ if app_mode == "🛡️ Admin Panel":
                         if r_app == 'N/A' or not r_app:
                             continue
 
-                        r_name = get_val(row, 'Name', 'Student Name', 'Candidate Name')
+                        r_name = get_val(row, 'Name', 'Student Name', 'Candidate Name', 'Trainee Name')
 
                         cursor.execute('''
-                            INSERT OR REPLACE INTO students VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            INSERT OR REPLACE INTO students (
+                                app_no, name, samagra_id, father_name, mother_name,
+                                dob, gender, admission_year, trade_name, trade_type,
+                                mobile, email, category, ews, minority,
+                                passing_year, board_name, domicile, date_of_admission,
+                                trade_duration, round, disability, pwd_category, e_district
+                            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         ''', (
                             r_app, r_name,
-                            get_val(row, 'Samagra ID', 'SamagraId'),
+                            get_val(row, 'Samagra ID', 'SamagraId', 'Samagra'),
                             get_val(row, 'Father Name', 'FatherName', "Father's Name"),
                             get_val(row, 'Mother Name', 'MotherName', "Mother's Name"),
                             get_val(row, 'Dob', 'DOB', 'Date of Birth'),
                             get_val(row, 'Gender'),
                             get_val(row, 'Admission Year', 'AdmissionYear'),
                             get_val(row, 'Trade Name', 'Trade', 'Course'),
-                            get_val(row, 'Trade Type NCVT/SCVT', 'Trade Type'),
+                            get_val(row, 'Trade Type NCVT/SCVT', 'Trade Type', 'TradeType'),
                             get_val(row, 'Trainee Mobile', 'Mobile', 'Mobile No', 'Phone'),
                             get_val(row, 'Trainee Email', 'Email', 'Email ID'),
                             get_val(row, 'Category'),
@@ -297,7 +318,7 @@ if app_mode == "🛡️ Admin Panel":
                             get_val(row, 'Passing Year', 'PassingYear'),
                             get_val(row, 'Board Name', 'Board'),
                             get_val(row, 'Domicile'),
-                            get_val(row, 'Date of Admission', 'Admission Date'),
+                            get_val(row, 'Date of Admission', 'Admission Date', 'AdmissionDate'),
                             get_val(row, 'Trade Duration', 'Duration'),
                             get_val(row, 'Round'),
                             get_val(row, 'Disability'),
@@ -315,32 +336,38 @@ if app_mode == "🛡️ Admin Panel":
         # --- SUBSECTION 3: DATA VIEWER ---
         st.markdown("---")
         st.subheader("📋 Live Database Student List")
+        
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM students')
             rows = cursor.fetchall()
+            col_names = [desc[0] for desc in cursor.description] if cursor.description else []
 
         if rows:
-            import pandas as pd
-            columns_list = [
-                "Application Number", "Student Name", "Samagra ID", "Father Name", "Mother Name",
-                "DOB", "Gender", "Admission Year", "Trade Name", "Trade Type", "Mobile No",
-                "Email", "Category", "EWS", "Minority", "Passing Year", "Board Name", "Domicile",
-                "Date of Admission", "Trade Duration", "Round", "Disability", "PWD Category", "E-District"
-            ]
-            df_full = pd.DataFrame(rows, columns=columns_list)
+            df_full = pd.DataFrame(rows, columns=col_names)
             st.dataframe(df_full, use_container_width=True)
             st.write(f"Total Students: **{len(rows)}**")
 
-            if st.button("🗑️ Clear All Student Records"):
-                with sqlite3.connect(DB_NAME) as conn:
-                    cursor = conn.cursor()
-                    cursor.execute('DELETE FROM students')
-                    conn.commit()
-                st.warning("All records deleted.")
-                st.rerun()
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("🗑️ Clear All Student Records"):
+                    with sqlite3.connect(DB_NAME) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('DELETE FROM students')
+                        conn.commit()
+                    st.warning("All student records deleted.")
+                    st.rerun()
+            with col_btn2:
+                if st.button("🔄 Reset & Re-create Table Schema"):
+                    reset_database()
+                    st.success("Database table reset to 24 columns cleanly!")
+                    st.rerun()
         else:
             st.info("📂 Database is currently empty.")
+            if st.button("🔄 Re-sync / Fix Table Schema"):
+                reset_database()
+                st.success("Schema synchronized!")
+                st.rerun()
 
     elif admin_pass != "":
         st.error("❌ Galat Password! Access Denied.")
@@ -354,7 +381,8 @@ else:
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM students')
-        db_count = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        db_count = row[0] if row else 0
 
     if db_count == 0:
         st.warning("⚠️ Database me abhi koi student records nahi hain. Admin panel se pehle CSV upload karein.")
