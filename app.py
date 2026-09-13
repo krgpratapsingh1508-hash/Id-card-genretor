@@ -77,23 +77,11 @@ def get_font(size, bold=False):
     return ImageFont.load_default()
 
 # ==========================================
-# 🎨 ID CARD ENGINE (CUSTOM BACKGROUND SUPPORT)
+# 🎨 ID CARD ENGINE (WITH AUTHORIZED SIGNATURE)
 # ==========================================
-def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None, bg_image_base64=None):
-    card_width, card_height = 420, 590
-    has_custom_bg = False
-
-    if bg_image_base64 and str(bg_image_base64).strip() not in ["None", ""]:
-        try:
-            bg_data = base64.b64decode(bg_image_base64)
-            card = Image.open(io.BytesIO(bg_data)).convert("RGB")
-            card = ImageOps.fit(card, (card_width, card_height), Image.Resampling.LANCZOS)
-            has_custom_bg = True
-        except Exception:
-            card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
-    else:
-        card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
-
+def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None, sign_base64=None):
+    card_width, card_height = 420, 600
+    card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
     draw = ImageDraw.Draw(card)
 
     font_header = get_font(20, bold=True)
@@ -101,13 +89,12 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     font_name = get_font(22, bold=True)
     font_label = get_font(14, bold=True)
     font_text = get_font(14, bold=False)
-    font_footer = get_font(13, bold=True)
+    font_footer = get_font(11, bold=True)
 
-    if not has_custom_bg:
-        draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
-        draw.rectangle([(0, card_height - 50), (card_width, card_height)], fill="#0F172A")
-        draw.text((210, card_height - 25), "AUTHORIZED SIGNATORY", fill="#F8FAFC", font=font_footer, anchor="mm")
+    # 1. Top Header Banner
+    draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
 
+    # 2. Logo Placement
     header_text_x = 210
     align_anchor = "mm"
     if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
@@ -121,13 +108,11 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         except Exception:
             pass
 
-    safe_title = (header_title or "INSTITUTE").upper()[:26]
-    title_fill = "#FFFFFF" if not has_custom_bg else text_color
-    sub_fill = "#E2E8F0" if not has_custom_bg else "#475569"
+    safe_title = (header_title or "INSTITUTE OF TECHNOLOGY").upper()[:26]
+    draw.text((header_text_x, 52), safe_title, fill="#FFFFFF", font=font_header, anchor=align_anchor)
+    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor=align_anchor)
 
-    draw.text((header_text_x, 52), safe_title, fill=title_fill, font=font_header, anchor=align_anchor)
-    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill=sub_fill, font=font_sub, anchor=align_anchor)
-
+    # 3. Circular Profile Photo
     cx, cy, r = 210, 215, 62
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
 
@@ -141,14 +126,17 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
             card.paste(student_img, (cx - r, cy - r), mask=mask)
         except Exception:
             draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
+            draw.text((cx, cy), "NO PHOTO", fill="#64748B", font=font_label, anchor="mm")
     else:
         draw.ellipse([(cx - r, cy - r), (cx + r, cy + r)], fill="#E2E8F0")
         draw.text((cx, cy), "PHOTO", fill="#64748B", font=font_label, anchor="mm")
 
+    # 4. Student Full Name
     student_name = str(student_dict.get('name', 'N/A')).upper()[:24]
     draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
-    draw.line([(45, 330), (375, 330)], fill="#CBD5E1", width=2)
+    draw.line([(45, 328), (375, 328)], fill="#CBD5E1", width=2)
 
+    # 5. Student Information Rows
     display_fields = [
         ("Roll / App No :", student_dict.get('app_no', 'N/A')),
         ("Father's Name :", student_dict.get('father_name', 'N/A')),
@@ -157,16 +145,36 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         ("Mobile No     :", student_dict.get('mobile', 'N/A')),
     ]
 
-    current_y = 350
+    current_y = 345
     for label, val in display_fields:
         val_str = str(val).strip()[:22]
         draw.text((45, current_y), label, fill="#64748B", font=font_label)
         draw.text((185, current_y), val_str, fill="#0F172A", font=font_text)
-        current_y += 35
+        current_y += 33
 
-    if has_custom_bg:
-        draw.rectangle([(0, card_height - 50), (card_width, card_height)], fill="#0F172A")
-        draw.text((210, card_height - 25), "AUTHORIZED SIGNATORY", fill="#F8FAFC", font=font_footer, anchor="mm")
+    # 6. Authorized Signatory & Uploaded Signature Section
+    if sign_base64 and str(sign_base64).strip() not in ["None", ""]:
+        try:
+            sign_data = base64.b64decode(sign_base64)
+            sign_img = Image.open(io.BytesIO(sign_data))
+            # Signature scale max 140 width, 45 height
+            sign_img.thumbnail((140, 45), Image.Resampling.LANCZOS)
+            sw, sh = sign_img.size
+            sx = 210 - (sw // 2)
+            sy = 548 - sh
+            if sign_img.mode == 'RGBA':
+                card.paste(sign_img, (sx, sy), mask=sign_img)
+            else:
+                card.paste(sign_img, (sx, sy))
+        except Exception:
+            pass
+
+    # Signatory Underline & Text
+    draw.line([(130, 555), (290, 555)], fill="#94A3B8", width=1)
+    draw.text((210, 572), "AUTHORIZED SIGNATORY", fill="#334155", font=font_footer, anchor="mm")
+
+    # Bottom Border Strip
+    draw.rectangle([(0, card_height - 6), (card_width, card_height)], fill=bg_color)
 
     out_bytes = io.BytesIO()
     card.save(out_bytes, format='PNG', quality=95)
@@ -179,7 +187,7 @@ db_title = get_setting('header_title', 'LOVE INSTITUTE')
 db_bg = get_setting('bg_color', '#8B00FF')
 db_text = get_setting('text_color', '#1E293B')
 db_logo = get_setting('saved_logo_b64', 'None')
-db_bg_image = get_setting('saved_bg_image_b64', 'None')
+db_sign = get_setting('saved_sign_b64', 'None')
 
 st.sidebar.title("📌 Menu")
 app_mode = st.sidebar.radio("Go to:", ["🎓 Student Portal", "🛡️ Admin Panel"])
@@ -206,11 +214,13 @@ if app_mode == "🛡️ Admin Panel":
                 save_setting('header_title', new_title.strip())
                 save_setting('bg_color', new_bg)
                 save_setting('text_color', new_text)
+                st.success("Settings saved successfully!")
                 st.rerun()
 
         st.markdown("---")
         col_img1, col_img2 = st.columns(2)
 
+        # 🏢 LOGO SECTION
         with col_img1:
             st.markdown("##### 🏢 Institute Logo")
             if db_logo and db_logo != "None":
@@ -218,29 +228,37 @@ if app_mode == "🛡️ Admin Panel":
                     st.image(io.BytesIO(base64.b64decode(db_logo)), width=90, caption="Current Logo")
                 except Exception:
                     pass
-            logo_file = st.file_uploader("Upload New Logo:", type=["png", "jpg", "jpeg"], key="logo_uploader")
+            logo_file = st.file_uploader("Upload New Logo (PNG / JPG):", type=["png", "jpg", "jpeg"], key="logo_uploader")
             if logo_file is not None and st.button("Save Logo", key="btn_save_logo"):
                 save_setting('saved_logo_b64', base64.b64encode(logo_file.getvalue()).decode('utf-8'))
+                st.success("Logo saved!")
                 st.rerun()
             if db_logo and db_logo != "None" and st.button("❌ Remove Logo", key="btn_del_logo"):
                 save_setting('saved_logo_b64', 'None')
                 st.rerun()
 
+        # ✍️ AUTHORIZED SIGNATURE SECTION
         with col_img2:
-            st.markdown("##### 🖼️ Card Background Image")
-            if db_bg_image and db_bg_image != "None":
+            st.markdown("##### ✍️ Authorized Signature")
+            if db_sign and db_sign != "None":
                 try:
-                    st.image(io.BytesIO(base64.b64decode(db_bg_image)), width=130, caption="Current Background")
+                    st.image(io.BytesIO(base64.b64decode(db_sign)), width=130, caption="Current Saved Sign")
                 except Exception:
                     pass
-            bg_file = st.file_uploader("Upload Card Background:", type=["png", "jpg", "jpeg"], key="bg_uploader")
-            if bg_file is not None and st.button("Save Background", key="btn_save_bg"):
-                save_setting('saved_bg_image_b64', base64.b64encode(bg_file.getvalue()).decode('utf-8'))
+            else:
+                st.caption("No signature uploaded yet.")
+
+            sign_file = st.file_uploader("Upload Signature (PNG / JPG):", type=["png", "jpg", "jpeg"], key="sign_uploader")
+            if sign_file is not None and st.button("Save Signature", key="btn_save_sign"):
+                save_setting('saved_sign_b64', base64.b64encode(sign_file.getvalue()).decode('utf-8'))
+                st.success("Signature saved successfully!")
                 st.rerun()
-            if db_bg_image and db_bg_image != "None" and st.button("❌ Remove Background", key="btn_del_bg"):
-                save_setting('saved_bg_image_b64', 'None')
+            if db_sign and db_sign != "None" and st.button("❌ Remove Signature", key="btn_del_sign"):
+                save_setting('saved_sign_b64', 'None')
+                st.success("Signature removed!")
                 st.rerun()
 
+        # CSV IMPORTER
         st.markdown("---")
         st.subheader("📦 Bulk CSV Data Importer")
         uploaded_csv = st.file_uploader("Select Spreadsheet (.CSV File)", type=["csv"], key="csv_uploader")
@@ -307,6 +325,7 @@ if app_mode == "🛡️ Admin Panel":
             except Exception as e:
                 st.error(f"CSV Error: {e}")
 
+        # DATA VIEWER
         st.markdown("---")
         st.subheader("📋 Live Database Student List")
         with sqlite3.connect(DB_NAME) as conn:
@@ -346,7 +365,8 @@ else:
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM students')
-        db_count = cursor.fetchone()[0]
+        row = cursor.fetchone()
+        db_count = row[0] if row else 0
 
     if db_count == 0:
         st.warning("⚠️ Database me abhi koi records nahi hain. Admin panel se CSV upload karein.")
@@ -378,9 +398,8 @@ else:
                     st.markdown(f"**Mobile:** {student_data['mobile']}")
 
                 st.markdown("---")
-                student_photo = st.file_uploader("Apni Passport Photo Upload Karein:", type=["jpg", "png", "jpeg"])
+                student_photo = st.file_uploader("Apni Passport Photo Upload Karein (Optional):", type=["jpg", "png", "jpeg"])
 
-                # Card HAMESHA dikhega (photo ho ya na ho)
                 card_bytes = generate_dynamic_card(
                     student_dict=student_data,
                     photo_file=student_photo,
@@ -388,7 +407,7 @@ else:
                     text_color=db_text,
                     header_title=db_title,
                     logo_base64=db_logo,
-                    bg_image_base64=db_bg_image
+                    sign_base64=db_sign
                 )
 
                 st.markdown("### 🪪 Live ID Card Preview:")
@@ -404,4 +423,4 @@ else:
                     st.balloons()
             else:
                 st.error("🔍 Yeh Application Number nahi mila. Sahi Number daalein.")
-                    
+                
