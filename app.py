@@ -7,7 +7,7 @@ import base64
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
 # ==========================================
-# 🗄️ MASTER DATABASE ENGINE (ULTRA STABLE)
+# 🗄️ MASTER DATABASE ENGINE (CENTRALIZED & FIXED)
 # ==========================================
 def get_db_connection():
     return sqlite3.connect('students_database.db')
@@ -61,8 +61,8 @@ def get_setting(key, default):
         row = cursor.fetchone()
         conn.close()
         if row and row[0]:
-            val = str(row[0])
-            # Purane cache markers ko completely saaf karna
+            val = str(row[0]).strip()
+            # Purane kharab brackets aur commas ko filter karna
             if val.startswith("('") or val.endswith(",)"):
                 val = val.replace("('", "").replace("',)", "").replace(",)", "").replace("'", "").strip()
             return val
@@ -77,7 +77,7 @@ def save_setting(key, value):
     conn.commit()
     conn.close()
 
-# Database fresh setup
+# Start application fresh database check
 init_db()
 
 # ==========================================
@@ -155,12 +155,12 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     return img_byte_arr.getvalue()
 
 # ==========================================
-# 🌐 MAIN APP MAIN CONTROL STRUCURE
+# 🌐 MAIN ROUTER LAYOUT CONTROLLER
 # ==========================================
 st.set_page_config(page_title="Dynamic Persistent ID System", page_icon="🪪", layout="wide")
 
-# Static fallbacks to avoid any Tuple mismatch error from background cache layers
-db_title = str(get_setting('header_title', 'GLOBAL TECHNOLOGIES'))
+# Persistent data state unpacking protection
+db_title = str(get_setting('header_title', 'UNIVERSAL INSTITUTE'))
 db_bg = str(get_setting('bg_color', '#0052cc'))
 db_text = str(get_setting('text_color', '#1E293B'))
 db_logo = str(get_setting('saved_logo_b64', 'None'))
@@ -168,7 +168,7 @@ db_logo = str(get_setting('saved_logo_b64', 'None'))
 app_mode = st.selectbox("Apna Portal Chunein:", ["🎓 Student Portal", "🛡️ Admin Panel"])
 
 # ------------------------------------------
-# 🛡️ MODE 1: ADMIN CONTROL CENTER (CENTRALIZED DATA LIST VIEWER)
+# 🛡️ MODE 1: ADMIN CONTROL CENTER (COMPLETE EXPLICIT REPAIR)
 # ------------------------------------------
 if app_mode == "🛡️ Admin Panel":
     st.header("🛡️ Admin Secure Access Control")
@@ -266,7 +266,7 @@ if app_mode == "🛡️ Admin Panel":
         st.subheader("📋 Live Database Uploaded List")
         
         conn = get_db_connection()
-        # Direct raw execution tracking using automatic connection read query frameworks
+        # Direct dynamic parsing query system to eliminate list layout length crashes
         df_full = pd.read_sql_query("SELECT * FROM students", conn)
         conn.close()
         
@@ -282,8 +282,6 @@ if app_mode == "🛡️ Admin Panel":
                 "pwd_category": "PWD Category", "e_district": "Trainee E-District"
             }
             df_full.rename(columns=friendly_columns, inplace=True)
-            
-            # Interactive selection column insert natively
             df_full.insert(0, "Select Row to Delete", False)
             
             edited_df = st.data_editor(
@@ -327,7 +325,7 @@ if app_mode == "🛡️ Admin Panel":
         st.error("❌ Galat Password! Access Denied.")
 
 # ------------------------------------------
-# 🎓 MODE 2: STUDENT PORTAL SECTION
+# 🎓 MODE 2: STUDENT PORTAL SECTION (ULTRA STABLE)
 # ------------------------------------------
 else:
     st.header("🎓 Student Self-Service Hub")
@@ -339,8 +337,8 @@ else:
     db_count = cursor.fetchone()
     conn.close()
     
-    # Tuple validation check
-    actual_count = db_count[0] if isinstance(db_count, tuple) else db_count
+    # Safe index parsing layer to handle tuple outputs
+    actual_count = db_count[0] if db_count and isinstance(db_count, tuple) else (db_count if db_count else 0)
     
     if actual_count == 0:
         st.warning("⚠️ Admin ne abhi tak koi records database me upload nahi kiye hain.")
@@ -357,25 +355,25 @@ else:
             conn.close()
             
             if result:
-                # 4. Database ke saare columns ko fixed array index se map karna
+                # 4. Database ke saare columns ko fixed array index se safe variables me unpack karna
                 student_data_map = {
-                    'app_no': str(result[0]),
-                    'name': str(result[1]),
-                    'samagra_id': str(result[2]),
-                    'father_name': str(result[3]),
-                    'mother_name': str(result[4]),
-                    'dob': str(result[5]),
-                    'gender': str(result[6]),
-                    'admission_year': str(result[7]),
-                    'trade_name': str(result[8]),
-                    'trade_type': str(result[9]),
-                    'mobile': str(result[10]),
-                    'email': str(result[11])
+                    'app_no': str(result[0]).strip() if result[0] is not None else "N/A",
+                    'name': str(result[1]).strip() if result[1] is not None else "Unknown",
+                    'samagra_id': str(result[2]).strip() if result[2] is not None else "N/A",
+                    'father_name': str(result[3]).strip() if result[3] is not None else "N/A",
+                    'mother_name': str(result[4]).strip() if result[4] is not None else "N/A",
+                    'dob': str(result[5]).strip() if result[5] is not None else "N/A",
+                    'gender': str(result[6]).strip() if result[6] is not None else "N/A",
+                    'admission_year': str(result[7]).strip() if result[7] is not None else "N/A",
+                    'trade_name': str(result[8]).strip() if result[8] is not None else "N/A",
+                    'trade_type': str(result[9]).strip() if result[9] is not None else "N/A",
+                    'mobile': str(result[10]).strip() if result[10] is not None else "N/A",
+                    'email': str(result[11]).strip() if result[11] is not None else "N/A"
                 }
                 
                 st.success(f"🎯 Record Found! Hello, {student_data_map['name']}")
                 
-                # Screen par verified profile values show karna
+                # Screen par verified profile fields visualization layout show karna
                 st.write("### 📋 Aapki Verified Details:")
                 col_a, col_b = st.columns(2)
                 with col_a:
@@ -389,13 +387,13 @@ else:
                 student_photo = st.file_uploader("Apni Passport Photo Upload Karein (JPG/PNG):", type=["jpg","png","jpeg"])
                 
                 if student_photo is not None:
-                    # Database parameters clean string formatting
-                    actual_bg = db_bg[0] if isinstance(db_bg, tuple) else db_bg
-                    actual_text = db_text[0] if isinstance(db_text, tuple) else db_text
-                    actual_title = db_title[0] if isinstance(db_title, tuple) else db_title
-                    actual_logo = db_logo[0] if isinstance(db_logo, tuple) else db_logo
+                    # Clear tuple string parsing formatting safeguards
+                    actual_bg = db_bg.strip() if isinstance(db_bg, str) else '#0052cc'
+                    actual_text = db_text.strip() if isinstance(db_text, str) else '#1E293B'
+                    actual_title = db_title.strip() if isinstance(db_title, str) else 'UNIVERSAL INSTITUTE'
+                    actual_logo = db_logo.strip() if isinstance(db_logo, str) else 'None'
 
-                    # ID card image bytes generate karna
+                    # ID card image bytes generate karna using Pillow canvas engine pipeline
                     card_bytes = generate_dynamic_card(
                         student_dict=student_data_map,
                         photo_file=student_photo,
@@ -406,7 +404,7 @@ else:
                     )
                     
                     st.write("### 🪪 Live ID Card Preview:")
-                    # Screen par premium card output render karna
+                    # Screen par dynamic formatted graphic rendering preview output mask show karna
                     st.image(card_bytes, width=270)
                     
                     # Instant Action Download Button
@@ -416,6 +414,7 @@ else:
                         file_name=f"ID_{search_app}.png", 
                         mime="image/png"
                     )
-                    st.balloons()
+                    st.balloons() # Visual celebration graphic animation trigger
             else:
-                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")                        
+                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number enter karein.")
+                
