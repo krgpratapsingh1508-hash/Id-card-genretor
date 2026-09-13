@@ -22,7 +22,7 @@ def init_db():
         cursor.execute("PRAGMA table_info(students)")
         existing_cols = cursor.fetchall()
         
-        # Agar table purana hai (jaise 3 columns wala), use drop karke naya 24-column banayein
+        # Agar table purana hai (jaise 3 columns wala), drop karke naya banayein
         if existing_cols and len(existing_cols) != 24:
             cursor.execute("DROP TABLE students")
         
@@ -85,7 +85,7 @@ def save_setting(key, value):
         cursor.execute('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', (key, str(value)))
         conn.commit()
 
-# Ensure correct table schema on startup
+# Ensure table schema on startup
 init_db()
 
 # ==========================================
@@ -110,12 +110,25 @@ def get_font(size, bold=False):
         return ImageFont.load_default()
 
 # ==========================================
-# 🎨 PREMIUM ID CARD ENGINE
+# 🎨 PREMIUM ID CARD ENGINE (CUSTOM BACKGROUND SUPPORT)
 # ==========================================
-def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None):
+def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header_title, logo_base64=None, bg_image_base64=None):
     card_width = 420
     card_height = 590
-    card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
+    
+    # 1. Base Card Background (Custom Image agar uploaded ho, varna Solid Clean Background)
+    has_custom_bg = False
+    if bg_image_base64 and str(bg_image_base64).strip() not in ["None", ""]:
+        try:
+            bg_data = base64.b64decode(bg_image_base64)
+            card = Image.open(io.BytesIO(bg_data)).convert("RGB")
+            card = ImageOps.fit(card, (card_width, card_height), Image.Resampling.LANCZOS)
+            has_custom_bg = True
+        except Exception:
+            card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
+    else:
+        card = Image.new("RGB", (card_width, card_height), "#F8FAFC")
+
     draw = ImageDraw.Draw(card)
 
     font_header = get_font(20, bold=True)
@@ -125,9 +138,13 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     font_text = get_font(14, bold=False)
     font_footer = get_font(13, bold=True)
 
-    # Top Header Banner
-    draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
+    # Agar custom background nahi hai, tabhi top banner & footer rectangle banayein
+    if not has_custom_bg:
+        draw.rectangle([(0, 0), (card_width, 135)], fill=bg_color)
+        draw.rectangle([(0, card_height - 50), (card_width, card_height)], fill="#0F172A")
+        draw.text((210, card_height - 25), "AUTHORIZED SIGNATORY", fill="#F8FAFC", font=font_footer, anchor="mm")
 
+    # Logo Placement
     header_text_x = 210
     align_anchor = "mm"
     if logo_base64 and str(logo_base64).strip() not in ["None", ""]:
@@ -142,13 +159,18 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
             header_text_x = 210
             align_anchor = "mm"
 
+    # Institute Title & Subheader
     safe_title = (header_title or "INSTITUTE OF TECHNOLOGY").upper()
     if len(safe_title) > 26 and align_anchor == "lm":
         safe_title = safe_title[:24] + "..."
-    draw.text((header_text_x, 52), safe_title, fill="#FFFFFF", font=font_header, anchor=align_anchor)
-    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill="#E2E8F0", font=font_sub, anchor=align_anchor)
+        
+    title_fill = "#FFFFFF" if not has_custom_bg else text_color
+    sub_fill = "#E2E8F0" if not has_custom_bg else "#475569"
 
-    # Profile Photo
+    draw.text((header_text_x, 52), safe_title, fill=title_fill, font=font_header, anchor=align_anchor)
+    draw.text((header_text_x, 86), "STUDENT IDENTITY CARD", fill=sub_fill, font=font_sub, anchor=align_anchor)
+
+    # Circular Profile Photo
     cx, cy, r = 210, 215, 62
     draw.ellipse([(cx - r - 4, cy - r - 4), (cx + r + 4, cy + r + 4)], fill="#FFFFFF", outline=bg_color, width=4)
 
@@ -176,7 +198,7 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
     draw.text((210, 305), student_name, fill=text_color, font=font_name, anchor="mm")
     draw.line([(45, 330), (375, 330)], fill="#CBD5E1", width=2)
 
-    # Details
+    # Information Details
     display_fields = [
         ("Roll / App No :", student_dict.get('app_no', 'N/A')),
         ("Father's Name :", student_dict.get('father_name', 'N/A')),
@@ -194,21 +216,18 @@ def generate_dynamic_card(student_dict, photo_file, bg_color, text_color, header
         draw.text((185, current_y), val_str, fill="#0F172A", font=font_text)
         current_y += 35
 
-    # Footer Strip
-    draw.rectangle([(0, card_height - 50), (card_width, card_height)], fill="#0F172A")
-    draw.text((210, card_height - 25), "AUTHORIZED SIGNATORY", fill="#F8FAFC", font=font_footer, anchor="mm")
-
     out_bytes = io.BytesIO()
     card.save(out_bytes, format='PNG', quality=95)
     return out_bytes.getvalue()
 
 # ==========================================
-# 🌐 MAIN NAVIGATION
+# 🌐 MAIN SETTINGS LOAD
 # ==========================================
 db_title = get_setting('header_title', 'LOVE INSTITUTE')
 db_bg = get_setting('bg_color', '#8B00FF')
 db_text = get_setting('text_color', '#1E293B')
 db_logo = get_setting('saved_logo_b64', 'None')
+db_bg_image = get_setting('saved_bg_image_b64', 'None')
 
 st.sidebar.title("📌 Menu")
 app_mode = st.sidebar.radio("Go to:", ["🎓 Student Portal", "🛡️ Admin Panel"])
@@ -229,9 +248,9 @@ if app_mode == "🛡️ Admin Panel":
             new_title = st.text_input("Institute / School Name:", value=db_title)
             col1, col2 = st.columns(2)
             with col1:
-                new_bg = st.color_picker("Header Background Color:", value=db_bg)
+                new_bg = st.color_picker("Header Top Theme Color:", value=db_bg)
             with col2:
-                new_text = st.color_picker("Student Name Color:", value=db_text)
+                new_text = st.color_picker("Student Name / Text Color:", value=db_text)
 
             submitted = st.form_submit_button("💾 Save Branding Settings")
             if submitted:
@@ -241,21 +260,57 @@ if app_mode == "🛡️ Admin Panel":
                 st.success("Settings saved successfully!")
                 st.rerun()
 
-        # Logo Upload & Management
-        st.markdown("##### 🏢 Institute Logo Status")
-        if db_logo and db_logo != "None":
-            try:
-                st.image(io.BytesIO(base64.b64decode(db_logo)), width=90, caption="Current Logo")
-            except Exception:
-                pass
+        st.markdown("---")
+        
+        # --- SUBSECTION 1.1: LOGO & BACKGROUND IMAGE MANAGEMENT ---
+        col_img1, col_img2 = st.columns(2)
 
-        logo_file = st.file_uploader("Upload New Logo (PNG / JPG):", type=["png", "jpg", "jpeg"], key="logo_uploader")
-        if logo_file is not None:
-            if st.button("Save Uploaded Logo"):
-                logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
-                save_setting('saved_logo_b64', logo_b64_str)
-                st.success("🎉 Logo permanently saved!")
-                st.rerun()
+        # 🏢 LOGO UPLOAD
+        with col_img1:
+            st.markdown("##### 🏢 Institute Logo")
+            if db_logo and db_logo != "None":
+                try:
+                    st.image(io.BytesIO(base64.b64decode(db_logo)), width=90, caption="Current Logo")
+                except Exception:
+                    pass
+            else:
+                st.caption("No custom logo uploaded.")
+
+            logo_file = st.file_uploader("Upload New Logo (PNG / JPG):", type=["png", "jpg", "jpeg"], key="logo_uploader")
+            if logo_file is not None:
+                if st.button("Save Logo", key="btn_save_logo"):
+                    logo_b64_str = base64.b64encode(logo_file.getvalue()).decode('utf-8')
+                    save_setting('saved_logo_b64', logo_b64_str)
+                    st.success("Logo saved!")
+                    st.rerun()
+            if db_logo and db_logo != "None":
+                if st.button("❌ Remove Logo", key="btn_del_logo"):
+                    save_setting('saved_logo_b64', 'None')
+                    st.rerun()
+
+        # 🖼️ CUSTOM CARD BACKGROUND IMAGE UPLOAD
+        with col_img2:
+            st.markdown("##### 🖼️ Card Background Image")
+            if db_bg_image and db_bg_image != "None":
+                try:
+                    st.image(io.BytesIO(base64.b64decode(db_bg_image)), width=130, caption="Current Background Image")
+                except Exception:
+                    pass
+            else:
+                st.caption("Default clean background active.")
+
+            bg_file = st.file_uploader("Upload Card Background (JPG / PNG):", type=["png", "jpg", "jpeg"], key="bg_uploader")
+            if bg_file is not None:
+                if st.button("Save Background Image", key="btn_save_bg"):
+                    bg_b64_str = base64.b64encode(bg_file.getvalue()).decode('utf-8')
+                    save_setting('saved_bg_image_b64', bg_b64_str)
+                    st.success("Background Image saved permanently!")
+                    st.rerun()
+            if db_bg_image and db_bg_image != "None":
+                if st.button("❌ Remove Background Image", key="btn_del_bg"):
+                    save_setting('saved_bg_image_b64', 'None')
+                    st.success("Default background restored!")
+                    st.rerun()
 
         # --- SUBSECTION 2: BATCH CSV IMPORTER ---
         st.markdown("---")
@@ -411,39 +466,4 @@ else:
                     'email': result[11]
                 }
 
-                st.success(f"🎯 Record Mil Gaya! Hello, **{student_data['name']}**")
-
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    st.markdown(f"**Father's Name:** {student_data['father_name']}")
-                    st.markdown(f"**DOB:** {student_data['dob']}")
-                with col_b:
-                    st.markdown(f"**Trade/Course:** {student_data['trade_name']}")
-                    st.markdown(f"**Mobile:** {student_data['mobile']}")
-
-                st.markdown("---")
-                student_photo = st.file_uploader("Apni Passport Size Photo Upload Karein (JPG / PNG):", type=["jpg", "png", "jpeg"])
-
-                card_bytes = generate_dynamic_card(
-                    student_dict=student_data,
-                    photo_file=student_photo,
-                    bg_color=db_bg,
-                    text_color=db_text,
-                    header_title=db_title,
-                    logo_base64=db_logo
-                )
-
-                st.markdown("### 🪪 Live ID Card Preview:")
-                st.image(card_bytes, width=320)
-
-                st.download_button(
-                    label="📥 Download ID Card (PNG)",
-                    data=card_bytes,
-                    file_name=f"ID_{student_data['app_no']}.png",
-                    mime="image/png"
-                )
-                if student_photo is not None:
-                    st.balloons()
-            else:
-                st.error("🔍 Yeh Application Number records me nahi mila. Kripya apna sahi Number check karke daalein.")
-                
+        
